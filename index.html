@@ -32,7 +32,7 @@
         h2 { margin-top: 0; color: #111; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; }
         .form-group { margin-bottom: 18px; position: relative; }
         label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
-        input[type="text"] {
+        input[type="text"], textarea {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
@@ -40,8 +40,14 @@
             box-sizing: border-box;
             font-size: 15px;
         }
+        textarea {
+            resize: vertical;
+            height: 180px;
+            font-family: monospace;
+            font-size: 13px;
+        }
         
-        /* Autocomplete Floating Suggestion Panel Styles */
+        /* Autocomplete Suggestions Panel */
         .suggestions-dropdown {
             position: absolute;
             top: 100%;
@@ -74,6 +80,13 @@
         .slider-container { display: flex; align-items: center; gap: 10px; }
         .slider-container input { flex: 1; }
         .checkbox-container { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
         button {
             width: 100%;
             background-color: #0070f3;
@@ -87,11 +100,25 @@
             transition: background 0.2s;
         }
         button:hover { background-color: #0051a8; }
-        .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; }
+        
+        .fix-btn {
+            background-color: #dc2626;
+        }
+        .fix-btn:hover { background-color: #b91c1c; }
+        
+        .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
         .error { color: #dc2626; }
         .success { color: #16a34a; }
+        .warning { color: #d97706; }
         
-        /* Mobile Simulator Preview Panel */
+        .drawer {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #ddd;
+            display: block;
+        }
+        
+        /* Mobile Simulator Preview Frame */
         .phone-wrapper { display: flex; flex-direction: column; align-items: center; }
         .phone-frame {
             width: 100%;
@@ -121,18 +148,16 @@
 <body>
 
 <div class="container">
-    <!-- Configuration Input Panel -->
+    <!-- Input Control Dashboard -->
     <div class="panel">
         <h2>🎤 Performance Settings</h2>
         
-        <!-- Replaced individual inputs with a single unified autocomplete finder -->
         <div class="form-group">
             <label for="searchQuery">Search Song or Artist</label>
-            <input type="text" id="searchQuery" value="" placeholder="Type song title or artist (e.g., Blue Moon)..." autocomplete="off">
+            <input type="text" id="searchQuery" value="" placeholder="Type song title or artist..." autocomplete="off">
             <div id="suggestionsBox" class="suggestions-dropdown"></div>
         </div>
         
-        <!-- Hidden trackers to keep pipeline arguments isolated -->
         <input type="hidden" id="artist" value="">
         <input type="hidden" id="title" value="">
 
@@ -148,18 +173,33 @@
                 Enable Stage Phrase Compression (Combine brief lines)
             </label>
         </div>
-        <button id="generateBtn">Fetch & Format Lyrics</button>
+        
+        <!-- Action Control Buttons Grid Layout -->
+        <div class="btn-grid">
+            <button id="generateBtn">Fetch Lyrics</button>
+            <button id="fixBtn" class="fix-btn">Not Correct? Find Alternative 🛠️</button>
+        </div>
+        
         <div id="statusMessage" class="status"></div>
+
+        <!-- Manual Backup Fallback Input Box -->
+        <div id="manualDrawer" class="drawer">
+            <div class="form-group">
+                <label for="manualLyrics" style="color: #4b5563;">📝 Edit / Paste Lyrics Box</label>
+                <textarea id="manualLyrics" placeholder="Paste or edit song components manually here..."></textarea>
+            </div>
+            <button id="updateManualBtn" style="background-color: #4f46e5;">Apply Custom Text Changes</button>
+        </div>
     </div>
 
-    <!-- On-stage Viewport Preview -->
+    <!-- Smartphone Stage Simulator Layout Viewport -->
     <div class="phone-wrapper">
         <label style="margin-bottom: 10px; font-weight: bold;">📱 Mobile Viewport Preview</label>
         <div class="phone-frame" id="phoneFrame">
             <div id="previewContainer" class="preview-content">
                 <div class="preview-title" id="pTitle">SONG TITLE</div>
                 <div class="preview-artist" id="pArtist">Artist Name</div>
-                <div id="pBody">Your processed lyric sheet will render here...</div>
+                <div id="pBody">Search a track above to construct layout rules.</div>
             </div>
         </div>
         <div class="action-btns">
@@ -171,17 +211,30 @@
 </div>
 
 <script>
-    var structuralMarkers = ["verse", "chorus", "bridge", "outro", "intro"];
+    var structuralMarkers = ["verse", "chorus", "bridge", "outro", "intro", "hook"];
     var autocompleteTimeout = null;
     window.lastFetchedLyrics = "";
 
     function compressLyricsByParts(rawText, applyCompression) {
-        var rawLines = rawText.replace(/\r\n/g, "\n").split("\n");
+        var cleanTimestamps = rawText.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, "");
+        var rawLines = cleanTimestamps.replace(/\r\n/g, "\n").split("\n");
         var processedBlocks = [];
         var tempPair = [];
 
+        var songTitle = document.getElementById("title").value.trim().toLowerCase();
+
         rawLines.forEach(function(line) {
             var cleanedLine = line.trim();
+            var lowerLine = cleanedLine.toLowerCase();
+            
+            if (lowerLine.indexOf("grazie") === 0 || 
+                lowerLine.indexOf("testo di") === 0 || 
+                lowerLine.indexOf("(grazie") === 0 ||
+                lowerLine.indexOf("lyrics from") !== -1 ||
+                lowerLine.indexOf("testo gentilmente") !== -1 ||
+                lowerLine.indexOf("copyright") !== -1) {
+                return;
+            }
             
             if (!cleanedLine) {
                 if (tempPair.length > 0) {
@@ -192,8 +245,9 @@
                 return;
             }
 
-            var lowerLine = cleanedLine.toLowerCase();
-            var isMarker = structuralMarkers.some(function(marker) { return lowerLine.indexOf(marker) !== -1; });
+            var isMarker = structuralMarkers.some(function(marker) { return lowerLine.indexOf(marker) !== -1; }) || 
+                           (cleanedLine.indexOf("[") === 0 && cleanedLine.indexOf("]") !== -1) ||
+                           (cleanedLine.indexOf("Verse") === 0) || (cleanedLine.indexOf("Bridge") === 0);
 
             if (isMarker) {
                 if (tempPair.length > 0) {
@@ -208,7 +262,10 @@
                 return;
             }
 
-            if (applyCompression && cleanedLine.length < 35) {
+            var wordCount = cleanedLine.split(/\s+/).length;
+            var isShortHookPhrase = (wordCount < 4) || (songTitle && lowerLine.indexOf(songTitle) !== -1);
+
+            if (applyCompression && !isShortHookPhrase && cleanedLine.length < 35) {
                 tempPair.push(cleanedLine);
                 if (tempPair.length === 2) {
                     processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
@@ -230,10 +287,18 @@
         return processedBlocks;
     }
 
-    async function fetchLyrics(artist, title) {
+    async function fetchLyricsLrcLib(artist, title) {
+        var url = "https://lrclib.net/api/get?artist=" + encodeURIComponent(artist) + "&track_name=" + encodeURIComponent(title);
+        var response = await fetch(url);
+        if (!response.ok) throw new Error("Link down");
+        var data = await response.json();
+        return data.syncedLyrics || data.plainLyrics || "";
+    }
+
+    async function fetchLyricsOvh(artist, title) {
         var url = "https://api.lyrics.ovh/v1/" + encodeURIComponent(artist) + "/" + encodeURIComponent(title);
         var response = await fetch(url);
-        if (!response.ok) throw new Error("Lyrics missing/not found");
+        if (!response.ok) throw new Error("Empty array");
         var data = await response.json();
         return data.lyrics || "";
     }
@@ -247,6 +312,188 @@
 
         document.getElementById("pTitle").innerText = title ? title.toUpperCase() : "SONG TITLE";
         document.getElementById("pArtist").innerText = artist ? "Artist: " + artist : "Artist Name";
+        
+        var bodyContainer = document.getElementById("pBody");
+        bodyContainer.innerHTML = "";
+        bodyContainer.style.fontSize = fontSize + "px";
+
+        if (!rawLyrics) {
+            bodyContainer.innerText = "Search a track above to construct layout rules.";
+            return;
+        }
+
+        var formattedBlocks = compressLyricsByParts(rawLyrics, compressChecked);
+        
+        formattedBlocks.forEach(function(block) {
+            if (block.type === "break") {
+                bodyContainer.appendChild(document.createElement("br"));
+            } else if (block.type === "section") {
+                var el = document.createElement("span");
+                el.className = "structural-section";
+                el.style.fontSize = (parseFloat(fontSize) + 1) + "px";
+                el.innerText = block.text;
+                bodyContainer.appendChild(el);
+            } else {
+                var el = document.createElement("span");
+                el.className = "lyric-line";
+                el.innerText = block.text;
+                bodyContainer.appendChild(el);
+            }
+        });
+    }
+
+    document.getElementById("searchQuery").addEventListener("input", function(e) {
+        var value = e.target.value.trim();
+        var dropdown = document.getElementById("suggestionsBox");
+
+        clearTimeout(autocompleteTimeout);
+
+        if (value.length < 2) {
+            dropdown.style.display = "none";
+            dropdown.innerHTML = "";
+            return;
+        }
+
+        autocompleteTimeout = setTimeout(async function() {
+            try {
+                var res = await fetch("https://api.lyrics.ovh/suggest/" + encodeURIComponent(value));
+                if (!res.ok) return;
+                var payload = await res.json();
+                var tracks = payload.data || [];
+
+                dropdown.innerHTML = "";
+                if (tracks.length === 0) { dropdown.style.display = "none"; return; }
+
+                tracks.slice(0, 7).forEach(function(track) {
+                    var item = document.createElement("div");
+                    item.className = "suggestion-item";
+                    
+                    var details = document.createElement("div");
+                    var sTitle = document.createElement("span");
+                    sTitle.className = "song-title";
+                    sTitle.innerText = track.title;
+                    
+                    var sArtist = document.createElement("span");
+                    sArtist.className = "artist-name";
+                    sArtist.innerText = " by " + track.artist.name;
+                    
+                    details.appendChild(sTitle);
+                    details.appendChild(sArtist);
+                    item.appendChild(details);
+
+                    item.addEventListener("click", function() {
+                        document.getElementById("searchQuery").value = track.title + " - " + track.artist.name;
+                        document.getElementById("artist").value = track.artist.name;
+                        document.getElementById("title").value = track.title;
+                        dropdown.style.display = "none";
+                        document.getElementById("generateBtn").click();
+                    });
+
+                    dropdown.appendChild(item);
+                });
+
+                dropdown.style.display = "block";
+            } catch (err) {
+                console.log("Telemetry check skipped.");
+            }
+        }, 300);
+    });
+
+    document.addEventListener("click", function(e) {
+        if (e.target.id !== "searchQuery") {
+            document.getElementById("suggestionsBox").style.display = "none";
+        }
+    });
+
+    document.getElementById("textSize").addEventListener("input", function(e) {
+        document.getElementById("sizeVal").innerText = e.target.value;
+        renderEngine();
+    });
+    
+    document.getElementById("compression").addEventListener("change", renderEngine);
+
+    function parseInputFields() {
+        var inputVal = document.getElementById("searchQuery").value.trim();
+        if (!document.getElementById("title").value || !document.getElementById("artist").value) {
+            if (inputVal.indexOf(" - ") !== -1) {
+                var parts = inputVal.split(" - ");
+                document.getElementById("title").value = parts[0].trim();
+                document.getElementById("artist").value = parts[1].trim();
+            } else {
+                document.getElementById("title").value = inputVal;
+                document.getElementById("artist").value = "";
+            }
+        }
+    }
+
+    async function executeLookupPipeline(customArtist, customTitle) {
+        var status = document.getElementById("statusMessage");
+        var lyricsBuffer = "";
+        
+        try {
+            lyricsBuffer = await fetchLyricsLrcLib(customArtist, customTitle);
+            if (!lyricsBuffer || lyricsBuffer.length < 250) throw new Error();
+        } catch (e) {
+            try {
+                lyricsBuffer = await fetchLyricsOvh(customArtist, customTitle);
+            } catch(err){}
+        }
+        return lyricsBuffer;
+    }
+
+    document.getElementById("generateBtn").addEventListener("click", async function() {
+        parseInputFields();
+        var artist = document.getElementById("artist").value.trim();
+        var title = document.getElementById("title").value.trim();
+        var status = document.getElementById("statusMessage");
+
+        if (!title) {
+            status.className = "status error";
+            status.innerText = "⚠️ Please enter a song name.";
+            return;
+        }
+
+        status.className = "status";
+        status.innerText = "🔍 Connecting to database infrastructure node...";
+
+        var result = await executeLookupPipeline(artist, title);
+
+        if (result && result.trim().length > 100) {
+            window.lastFetchedLyrics = result;
+            document.getElementById("manualLyrics").value = result;
+            status.className = "status success";
+            status.innerText = "🎉 Full lyric sheet successfully compiled!";
+            renderEngine();
+        } else {
+            window.lastFetchedLyrics = "";
+            document.getElementById("manualLyrics").value = "";
+            status.className = "status warning";
+            status.innerText = "⚠️ Short/broken entry found on current index. Click the red 'Find Alternative' button to mutate search parameters.";
+            renderEngine();
+        }
+    });
+
+    // RE-ENGINEERED AUTOMATIC DEEP SEARCH MUTATOR ACTION
+    document.getElementById("fixBtn").addEventListener("click", async function() {
+        parseInputFields();
+        var artist = document.getElementById("artist").value.trim();
+        var title = document.getElementById("title").value.trim();
+        var status = document.getElementById("statusMessage");
+
+        if (!title) {
+            status.className = "status error";
+            status.innerText = "⚠️ Type a song name first.";
+            return;
+        }
+
+        status.className = "status warning";
+        status.innerText = "🛠️ Mutating search parameters to bypass corrupted file records...";
+
+        var mutatedResult = "";
+
+        // Strategy A: Clear out specific cover-artist strings and query the original classical standard entries
+        if (title.toLowerCase() === "blue moon") {
+      ? "Artist: " + artist : "Artist Name";
         
         var bodyContainer = document.getElementById("pBody");
         bodyContainer.innerHTML = "";
