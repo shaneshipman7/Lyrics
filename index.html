@@ -47,7 +47,7 @@
             font-size: 13px;
         }
         
-        /* Dropdown suggestions menu panel markup */
+        /* Autocomplete Suggestions Panel */
         .suggestions-dropdown {
             position: absolute;
             top: 100%;
@@ -81,6 +81,12 @@
         .slider-container input { flex: 1; }
         .checkbox-container { display: flex; align-items: center; gap: 8px; cursor: pointer; }
         
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
         button {
             width: 100%;
             background-color: #0070f3;
@@ -92,22 +98,27 @@
             border-radius: 6px;
             cursor: pointer;
             transition: background 0.2s;
-            margin-bottom: 10px;
         }
         button:hover { background-color: #0051a8; }
         
-        .status { margin-top: 5px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
+        .fix-btn {
+            background-color: #dc2626;
+        }
+        .fix-btn:hover { background-color: #b91c1c; }
+        
+        .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
         .error { color: #dc2626; }
         .success { color: #16a34a; }
         .warning { color: #d97706; }
         
         .drawer {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 2px dashed #eaeaea;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #ddd;
+            display: block;
         }
         
-        /* Smartphone Stage simulator frame */
+        /* Mobile Simulator Preview Frame */
         .phone-wrapper { display: flex; flex-direction: column; align-items: center; }
         .phone-frame {
             width: 100%;
@@ -126,6 +137,8 @@
         .preview-artist { font-style: italic; color: #666; margin-bottom: 20px; font-size: 14px; }
         .structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 14px; margin-bottom: 4px; color: #111; }
         .lyric-line { display: block; margin-bottom: 6px; line-height: 1.35; }
+        .lyric-line-spanish { display: block; margin-bottom: 6px; line-height: 1.35; font-weight: bold; }
+        .lyric-translation { display: block; margin-bottom: 2px; line-height: 1.3; color: #555; font-style: italic; font-size: 0.88em; }
         
         .action-btns { width: 100%; max-width: 360px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .secondary-btn { background-color: #6b7280; }
@@ -137,7 +150,7 @@
 <body>
 
 <div class="container">
-    <!-- Input Dashboard -->
+    <!-- Input Control Dashboard -->
     <div class="panel">
         <h2>🎤 Performance Settings</h2>
         
@@ -162,21 +175,32 @@
                 Enable Stage Phrase Compression (Combine brief lines)
             </label>
         </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="showTranslation">
+                Show English Translation for Spanish Songs <small style="color:#666;font-size:12px;">(powered by free translation)</small>
+            </label>
+        </div>
         
-        <button id="generateBtn">Fetch & Format Lyrics</button>
+        <!-- Action Control Buttons Grid Layout -->
+        <div class="btn-grid">
+            <button id="generateBtn">Fetch Lyrics</button>
+            <button id="fixBtn" class="fix-btn">Not Correct? Find Alternative 🛠️</button>
+        </div>
+        
         <div id="statusMessage" class="status"></div>
 
-        <!-- Permanent Open Workspace Backup Input Container Box -->
-        <div class="drawer">
+        <!-- Manual Backup Fallback Input Box -->
+        <div id="manualDrawer" class="drawer">
             <div class="form-group">
-                <label for="manualLyrics" style="color: #4f46e5; font-weight: bold;">📝 Edit / Paste Lyrics Box</label>
+                <label for="manualLyrics" style="color: #4b5563;">📝 Edit / Paste Lyrics Box <small>(LRC timestamps are auto-removed)</small></label>
                 <textarea id="manualLyrics" placeholder="Paste or edit song components manually here..."></textarea>
             </div>
             <button id="updateManualBtn" style="background-color: #4f46e5;">Apply Custom Text Changes</button>
         </div>
     </div>
 
-    <!-- Smartphone Stage Simulator Layout Preview Window -->
+    <!-- Smartphone Stage Simulator Layout Viewport -->
     <div class="phone-wrapper">
         <label style="margin-bottom: 10px; font-weight: bold;">📱 Mobile Viewport Preview</label>
         <div class="phone-frame" id="phoneFrame">
@@ -198,24 +222,78 @@
     var structuralMarkers = ["verse", "chorus", "bridge", "outro", "intro", "hook"];
     var autocompleteTimeout = null;
     window.lastFetchedLyrics = "";
+    window.translationLines = {}; // cache: spanishLine -> englishLine
+    window.translationPending = false;
 
-    // INTERNAL EMERGENCY PRODUCTION VAULT
-    // These override broken or restricted web servers completely
-    var backupStageVault = {
-        "daysleeper": {
-            "title": "Daysleeper",
-            "artist": "R.E.M.",
-            "text": "[Verse 1]\nReceiving department, 3 A.M.\nStaff cuts have socked up the overage\nDirectives are posted, no callbacks, complaints\nEverywhere is calm\nHong Kong is present, Taipei awakes\nAll talk of circadian rhythm\n\n[Chorus]\nI see today with a newsprint fray\nMy night is colored headache gray\nDaysleeper\nDaysleeper\nDaysleeper\n\n[Verse 2]\nThe bull and the bear are marking their territories\nThey're leading the blind with their international glories\nI'm the screen, the blinding light\nI'm the screen, I work at night\n\n[Chorus]\nI see today with a newsprint fray\nMy night is colored headache gray\nDon't wake me with so much\nDaysleeper\n\n[Bridge]\nI cried the other night, I can't even say why\nFluorescent flat caffeine lights, its furious balancing\nI'm the screen, the blinding light\nI'm the screen, I work at night\n\n[Chorus]\nI see today with a newsprint fray\nMy night is colored headache gray\nDon't wake me with so much\n\n[Outro]\nThe ocean machine is set to nine\nI'll squeeze into heaven and valentine\nMy bed is pulling me, gravity\nDaysleeper\nDaysleeper\nDaysleeper\nDaysleeper\nDaysleeper"
-        },
-        "blue moon": {
-            "title": "Blue Moon",
-            "artist": "Dean Martin",
-            "text": "[Verse 1]\nBlue moon\nYou saw me standing alone\nWithout a dream in my heart\nWithout a love of my own\n\n[Verse 2]\nBlue moon\nYou knew just what I was there for\nYou heard me saying a prayer for\nSomeone I really could care for\n\n[Bridge]\nAnd then there suddenly appeared before me\nThe only one my arms could ever hold\nI heard somebody whisper, \"Please adore me\"\nWhen I looked the moon had turned to gold\n\n[Verse 3]\nBlue moon\nNow, I'm no longer alone\nWithout a dream in my heart\nWithout a love of my own\n\n[Bridge]\nAnd then there suddenly appeared before me\nThe only one my arms will ever hold\nI heard somebody whisper, \"Please adore me\"\nAnd when I looked the moon had turned to gold\n\n[Verse 4]\nBlue moon\nNow, I'm no longer alone\nWithout a dream in my heart\nWithout a love of my own\n\n[Outro]\nWithout a love of my own\nWithout a love of my own"
+    async function fetchSpanishTranslation(lines) {
+        const translations = {};
+        const unique = [...new Set(lines.filter(l => l && l.trim().length > 0))];
+        
+        if (unique.length === 0) return {};
+
+        console.log(`Translating ${unique.length} Spanish lines using free MyMemory API...`);
+
+        const status = document.getElementById("statusMessage");
+        const prevStatus = status.innerText;
+
+        const batchSize = 8;
+        for (let i = 0; i < unique.length; i += batchSize) {
+            const batch = unique.slice(i, i + batchSize);
+            
+            const promises = batch.map(async (line) => {
+                try {
+                    const encoded = encodeURIComponent(line);
+                    const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=es|en`;
+                    
+                    const response = await fetch(url, { 
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    
+                    if (!response.ok) return null;
+                    
+                    const data = await response.json();
+                    if (data.responseData && data.responseData.translatedText) {
+                        return { original: line, translated: data.responseData.translatedText };
+                    }
+                    return null;
+                } catch (e) {
+                    console.warn("Translation failed for line:", line, e);
+                    return null;
+                }
+            });
+
+            const results = await Promise.all(promises);
+            results.forEach(r => {
+                if (r && r.translated) {
+                    translations[r.original] = r.translated;
+                }
+            });
+
+            if (i + batchSize < unique.length) {
+                await new Promise(resolve => setTimeout(resolve, 350));
+            }
         }
-    };
+        
+        console.log(`✅ Translations loaded: ${Object.keys(translations).length} lines`);
+        status.className = "status success";
+        status.innerText = Object.keys(translations).length > 0 
+            ? "✅ Spanish → English translations loaded!" 
+            : (prevStatus || "");
+
+        return translations;
+    }
+
+    function detectSpanish(rawText) {
+        var spanishWords = ["que", "con", "una", "para", "como", "pero", "por", "amor", "corazon", "cuando", "todo", "eres", "estoy", "quiero", "vida", "noche", "solo", "siempre", "tu", "mi", "me", "te", "se", "es", "del", "las", "los", "hay", "tan", "mas", "sin", "hoy"];
+        var lower = rawText.toLowerCase().replace(/[áéíóúü]/g, function(c){ return {á:"a",é:"e",í:"i",ó:"o",ú:"u",ü:"u"}[c]||c; });
+        var hits = spanishWords.filter(function(w){ return new RegExp("\\b" + w + "\\b").test(lower); }).length;
+        return hits >= 4;
+    }
 
     function compressLyricsByParts(rawText, applyCompression) {
-        var cleanTimestamps = rawText.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, "");
+        // IMPROVED: More robust timestamp removal (handles [00:11.86], [00:11], [0:11.86], etc.)
+        var cleanTimestamps = rawText.replace(/\[\d{1,3}:\d{2}(:\d{2})?(\.\d{2,3})?\]/g, "");
         var rawLines = cleanTimestamps.replace(/\r\n/g, "\n").split("\n");
         var processedBlocks = [];
         var tempPair = [];
@@ -227,9 +305,10 @@
             var lowerLine = cleanedLine.toLowerCase();
             
             if (lowerLine.indexOf("grazie") === 0 || 
-                lowerLine.indexOf("testo") === 0 || 
+                lowerLine.indexOf("testo di") === 0 || 
                 lowerLine.indexOf("(grazie") === 0 ||
                 lowerLine.indexOf("lyrics from") !== -1 ||
+                lowerLine.indexOf("testo gentilmente") !== -1 ||
                 lowerLine.indexOf("copyright") !== -1) {
                 return;
             }
@@ -244,7 +323,8 @@
             }
 
             var isMarker = structuralMarkers.some(function(marker) { return lowerLine.indexOf(marker) !== -1; }) || 
-                           (cleanedLine.indexOf("[") === 0 && cleanedLine.indexOf("]") !== -1);
+                           (cleanedLine.indexOf("[") === 0 && cleanedLine.indexOf("]") !== -1) ||
+                           (cleanedLine.indexOf("Verse") === 0) || (cleanedLine.indexOf("Bridge") === 0);
 
             if (isMarker) {
                 if (tempPair.length > 0) {
@@ -284,18 +364,49 @@
         return processedBlocks;
     }
 
-    async function fetchLyricsPrimary(artist, title) {
-        var url = "https://lrclib.net/api/get?artist=" + encodeURIComponent(artist) + "&track_name=" + encodeURIComponent(title);
-        var response = await fetch(url);
-        if (!response.ok) throw new Error();
-        var data = await response.json();
-        return data.syncedLyrics || data.plainLyrics || "";
+    // FIXED LRCLIB (artist_name=) + search fallback
+    async function fetchLyricsLrcLib(artist, title) {
+        let url = `https://lrclib.net/api/get?artist_name=\( {encodeURIComponent(artist)}&track_name= \){encodeURIComponent(title)}`;
+        console.log("🔍 Trying LRCLIB direct:", url);
+        
+        try {
+            let response = await fetch(url);
+            if (response.ok) {
+                let data = await response.json();
+                let lyrics = data.syncedLyrics || data.plainLyrics || "";
+                if (lyrics && lyrics.length > 100) {
+                    console.log("✅ LRCLIB direct success");
+                    return lyrics;
+                }
+            }
+        } catch(e) { console.warn("LRCLIB direct failed"); }
+
+        // Search fallback
+        try {
+            url = `https://lrclib.net/api/search?q=${encodeURIComponent(artist + " " + title)}`;
+            console.log("🔍 Trying LRCLIB search fallback:", url);
+            let response = await fetch(url);
+            if (response.ok) {
+                let results = await response.json();
+                if (Array.isArray(results) && results.length > 0) {
+                    let best = results[0];
+                    let lyrics = best.syncedLyrics || best.plainLyrics || "";
+                    if (lyrics && lyrics.length > 100) {
+                        console.log("✅ LRCLIB search success");
+                        return lyrics;
+                    }
+                }
+            }
+        } catch(e) { console.warn("LRCLIB search failed"); }
+        
+        throw new Error("LRCLIB failed");
     }
 
-    async function fetchLyricsSecondary(artist, title) {
+    async function fetchLyricsOvh(artist, title) {
         var url = "https://api.lyrics.ovh/v1/" + encodeURIComponent(artist) + "/" + encodeURIComponent(title);
+        console.log("🔍 Trying Lyrics.ovh:", url);
         var response = await fetch(url);
-        if (!response.ok) throw new Error();
+        if (!response.ok) throw new Error("Empty array");
         var data = await response.json();
         return data.lyrics || "";
     }
@@ -305,7 +416,9 @@
         var title = document.getElementById("title").value;
         var fontSize = document.getElementById("textSize").value;
         var compressChecked = document.getElementById("compression").checked;
+        var showTranslation = document.getElementById("showTranslation").checked;
         var rawLyrics = window.lastFetchedLyrics || "";
+        var isSpanish = rawLyrics ? detectSpanish(rawLyrics) : false;
 
         document.getElementById("pTitle").innerText = title ? title.toUpperCase() : "SONG TITLE";
         document.getElementById("pArtist").innerText = artist ? "Artist: " + artist : "Artist Name";
@@ -320,6 +433,7 @@
         }
 
         var formattedBlocks = compressLyricsByParts(rawLyrics, compressChecked);
+        var useTranslation = showTranslation && isSpanish;
         
         formattedBlocks.forEach(function(block) {
             if (block.type === "break") {
@@ -331,15 +445,57 @@
                 el.innerText = block.text;
                 bodyContainer.appendChild(el);
             } else {
+                if (useTranslation && window.translationLines[block.text]) {
+                    var trans = document.createElement("span");
+                    trans.className = "lyric-translation";
+                    trans.style.fontSize = (parseFloat(fontSize) * 0.88) + "px";
+                    trans.innerText = window.translationLines[block.text];
+                    bodyContainer.appendChild(trans);
+                }
                 var el = document.createElement("span");
-                el.className = "lyric-line";
+                el.className = isSpanish && showTranslation ? "lyric-line-spanish" : "lyric-line";
                 el.innerText = block.text;
                 bodyContainer.appendChild(el);
             }
         });
     }
 
-    // Dynamic Search Suggestion Scanner
+    async function renderWithTranslation() {
+        var rawLyrics = window.lastFetchedLyrics || "";
+        var showTranslation = document.getElementById("showTranslation").checked;
+        var isSpanishDetected = detectSpanish(rawLyrics);
+        if (!showTranslation || !rawLyrics || !isSpanishDetected) {
+            renderEngine();
+            return;
+        }
+        var compressChecked = document.getElementById("compression").checked;
+        var blocks = compressLyricsByParts(rawLyrics, compressChecked);
+        var lyricLines = blocks.filter(function(b){ return b.type === "line"; }).map(function(b){ return b.text; });
+        var uncached = lyricLines.filter(function(l){ return !window.translationLines[l]; });
+
+        if (uncached.length > 0) {
+            window.translationPending = true;
+            var status = document.getElementById("statusMessage");
+            var prevStatus = status.innerText;
+            status.className = "status warning";
+            status.innerText = "🌐 Fetching English translations for " + uncached.length + " lines...";
+            try {
+                var result = await fetchSpanishTranslation(uncached);
+                Object.assign(window.translationLines, result);
+                status.className = "status success";
+                status.innerText = Object.keys(result).length > 0 ? "✅ Translations loaded!" : (prevStatus || "");
+            } catch(e) {
+                status.className = "status error";
+                status.innerText = "⚠️ Translation fetch failed.";
+            } finally {
+                window.translationPending = false;
+            }
+        }
+        renderEngine();
+    }
+
+    // ... (autocomplete, event listeners, parseInputFields, executeLookupPipeline remain unchanged from previous version) ...
+
     document.getElementById("searchQuery").addEventListener("input", function(e) {
         var value = e.target.value.trim();
         var dropdown = document.getElementById("suggestionsBox");
@@ -365,7 +521,19 @@
                 tracks.slice(0, 7).forEach(function(track) {
                     var item = document.createElement("div");
                     item.className = "suggestion-item";
-                    item.innerHTML = "<div><span class='song-title'>" + track.title + "</span><span class='artist-name'> by " + track.artist.name + "</span></div>";
+                    
+                    var details = document.createElement("div");
+                    var sTitle = document.createElement("span");
+                    sTitle.className = "song-title";
+                    sTitle.innerText = track.title;
+                    
+                    var sArtist = document.createElement("span");
+                    sArtist.className = "artist-name";
+                    sArtist.innerText = " by " + track.artist.name;
+                    
+                    details.appendChild(sTitle);
+                    details.appendChild(sArtist);
+                    item.appendChild(details);
 
                     item.addEventListener("click", function() {
                         document.getElementById("searchQuery").value = track.title + " - " + track.artist.name;
@@ -379,7 +547,9 @@
                 });
 
                 dropdown.style.display = "block";
-            } catch (err) {}
+            } catch (err) {
+                console.log("Autocomplete skipped.");
+            }
         }, 300);
     });
 
@@ -395,6 +565,10 @@
     });
     
     document.getElementById("compression").addEventListener("change", renderEngine);
+    document.getElementById("showTranslation").addEventListener("change", function() {
+        window.translationLines = {};
+        renderWithTranslation();
+    });
 
     function parseInputFields() {
         var inputVal = document.getElementById("searchQuery").value.trim();
@@ -410,6 +584,25 @@
         }
     }
 
+    async function executeLookupPipeline(customArtist, customTitle) {
+        var status = document.getElementById("statusMessage");
+        var lyricsBuffer = "";
+        
+        status.innerText = "🔍 Trying LRCLIB...";
+        try {
+            lyricsBuffer = await fetchLyricsLrcLib(customArtist, customTitle);
+            if (lyricsBuffer && lyricsBuffer.length > 150) return lyricsBuffer;
+        } catch (e) {}
+        
+        status.innerText = "🔍 Trying Lyrics.ovh...";
+        try {
+            lyricsBuffer = await fetchLyricsOvh(customArtist, customTitle);
+            if (lyricsBuffer && lyricsBuffer.length > 150) return lyricsBuffer;
+        } catch(err){}
+        
+        return lyricsBuffer;
+    }
+
     document.getElementById("generateBtn").addEventListener("click", async function() {
         parseInputFields();
         var artist = document.getElementById("artist").value.trim();
@@ -422,59 +615,82 @@
             return;
         }
 
-        // INTELLIGENT INTERCEPTOR VAULT LOOKUP
-        // Instantly bypasses network protocols if searching a known broken track signature
-        var checkKey = title.toLowerCase();
-        if (backupStageVault[checkKey] || (checkKey === "daysleeper")) {
-            var vaultMatch = backupStageVault["daysleeper"];
-            if (checkKey.indexOf("moon") !== -1) vaultMatch = backupStageVault["blue moon"];
-            
-            document.getElementById("title").value = vaultMatch.title;
-            document.getElementById("artist").value = vaultMatch.artist;
-            window.lastFetchedLyrics = vaultMatch.text;
-            document.getElementById("manualLyrics").value = vaultMatch.text;
-            status.className = "status success";
-            status.innerText = "🎉 Track verified! Full vault arrangement loaded instantly.";
-            renderEngine();
-            return;
-        }
-
         status.className = "status";
-        status.innerText = "🔍 Connecting to live database nodes...";
+        status.innerText = "🔍 Looking up lyrics...";
 
-        var lyricsBuffer = "";
-        try {
-            lyricsBuffer = await fetchLyricsPrimary(artist, title);
-            if (!lyricsBuffer || lyricsBuffer.length < 150) throw new Error();
-        } catch (e) {
-            try {
-                lyricsBuffer = await fetchLyricsSecondary(artist, title);
-            } catch(err){}
-        }
+        var result = await executeLookupPipeline(artist, title);
 
-        if (lyricsBuffer && lyricsBuffer.trim().length > 100) {
-            window.lastFetchedLyrics = lyricsBuffer;
-            document.getElementById("manualLyrics").value = lyricsBuffer;
+        if (result && result.trim().length > 150) {
+            window.lastFetchedLyrics = result;
+            window.translationLines = {};
+            document.getElementById("manualLyrics").value = result;
             status.className = "status success";
-            status.innerText = "🎉 Full lyric sheet successfully compiled!";
-            renderEngine();
+            status.innerText = "🎉 Lyrics loaded successfully!";
+            await renderWithTranslation();
         } else {
             window.lastFetchedLyrics = "";
+            window.translationLines = {};
             document.getElementById("manualLyrics").value = "";
             status.className = "status warning";
-            status.innerText = "⚠️ Live record blank or restricted. Paste your text directly into the Edit Box below!";
+            status.innerText = "⚠️ Could not find full lyrics automatically. Paste manually below 👇";
             renderEngine();
         }
     });
 
+    document.getElementById("fixBtn").addEventListener("click", async function() {
+        parseInputFields();
+        var artist = document.getElementById("artist").value.trim();
+        var title = document.getElementById("title").value.trim();
+        var status = document.getElementById("statusMessage");
+
+        if (!title) {
+            status.className = "status error";
+            status.innerText = "⚠️ Type a song name first.";
+            return;
+        }
+
+        status.className = "status warning";
+        status.innerText = "🛠️ Searching alternative sources...";
+
+        var mutatedResult = await executeLookupPipeline(artist, title);
+        if (!mutatedResult || mutatedResult.length < 250) mutatedResult = await executeLookupPipeline("", title);
+        if (!mutatedResult || mutatedResult.length < 250) mutatedResult = await executeLookupPipeline(artist, title + " lyrics");
+
+        if (mutatedResult && mutatedResult.trim().length > 150) {
+            window.lastFetchedLyrics = mutatedResult;
+            window.translationLines = {};
+            document.getElementById("manualLyrics").value = mutatedResult;
+            status.className = "status success";
+            status.innerText = "🎉 Alternative lyrics found!";
+            await renderWithTranslation();
+        } else {
+            status.className = "status error";
+            status.innerText = "❌ Still couldn't find it. Paste the lyrics manually below.";
+        }
+    });
+
+    // IMPROVED MANUAL UPDATE: auto-clean LRC timestamps + show clean version
     document.getElementById("updateManualBtn").addEventListener("click", function() {
-        var manualText = document.getElementById("manualLyrics").value;
-        if (!manualText.trim()) {
+        let manualText = document.getElementById("manualLyrics").value.trim();
+        if (!manualText) {
             alert("The text container box is empty.");
             return;
         }
-        window.lastFetchedLyrics = manualText;
-        renderEngine();
+        
+        // Auto-clean timestamps before saving
+        const cleaned = manualText.replace(/\[\d{1,3}:\d{2}(:\d{2})?(\.\d{2,3})?\]/g, "").trim();
+        
+        window.lastFetchedLyrics = cleaned;
+        window.translationLines = {};
+        
+        // Update the textarea so user sees the clean version
+        document.getElementById("manualLyrics").value = cleaned;
+        
+        const status = document.getElementById("statusMessage");
+        status.className = "status success";
+        status.innerText = "✅ Manual lyrics applied & cleaned!";
+        
+        renderWithTranslation();
     });
 
     document.getElementById("copyBtn").addEventListener("click", function() {
@@ -517,19 +733,17 @@
             ".preview-artist { font-style: italic; color: #555555; margin-bottom: 24px; font-size: 14px; display: block; }" +
             ".structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 16px; margin-bottom: 6px; color: #111111; font-size: " + (parseFloat(fontSize) + 2) + "pt; }" +
             ".lyric-line { display: block; margin-bottom: 6px; font-size: " + fontSize + "pt; color: #000000; width: 100%; clear: both; }" +
+            ".lyric-line-spanish { display: block; margin-bottom: 6px; font-size: " + fontSize + "pt; font-weight: bold; color: #000000; width: 100%; clear: both; }" +
+            ".lyric-translation { display: block; margin-bottom: 2px; font-size: " + (parseFloat(fontSize) * 0.88) + "pt; color: #555555; font-style: italic; width: 100%; clear: both; }" +
             "</style></head><body>" + content + "</body></html>";
     }
 
     document.getElementById("printBtn").addEventListener("click", function() {
         var printWindow = window.open("", "_blank");
         var htmlPayload = generateGDocsHtmlDocument();
-            
         printWindow.document.write(htmlPayload);
         printWindow.document.close();
-        
-        setTimeout(function() {
-            printWindow.print();
-        }, 250);
+        setTimeout(function() { printWindow.print(); }, 250);
     });
 
     document.getElementById("gdocsBtn").addEventListener("click", function() {
@@ -538,7 +752,6 @@
         
         var blob = new Blob([htmlPayload], { type: "text/html;charset=utf-8" });
         var link = document.createElement("a");
-        
         link.href = URL.createObjectURL(blob);
         link.download = title + " - Mobile Lyric Sheet.html";
         
@@ -546,15 +759,60 @@
         link.click();
         document.body.removeChild(link);
         
-        alert(
-            "⚡ Step 1: Your optimized file has downloaded.\n\n" +
-            "⚡ Step 2: Drag it into your Google Drive.\n\n" +
-            "⚡ Step 3: Right-click it in Drive, select 'Open with' -> 'Google Docs'.\n\n" +
-            "It will now expand beautifully across the entire document canvas!"
-        );
+        alert("⚡ File downloaded! Drag into Google Drive → Open with → Google Docs.");
     });
 
-    renderEngine();
+    // For the song you just pasted ("Para Siempre" - Vicente Fernández), just copy the entire block below and paste it into the manual box:
+    // 
+    // Paste this into the manual box and click "Apply Custom Text Changes":
+    // 
+    // Vale más, un buen amor
+    // Que mil costales de oro
+    // Vale más, un buen amor
+    // Por eso eres mi tesoro
+    // Valgo mucho, junto a ti
+    // Y soy muy feliz contigo
+    // Vales mucho para mí
+    // Con el corazón te digo
+    // 
+    // Olvidemos
+    // El pasado
+    // Y lo que diga la gente
+    // La verdad es
+    // Que te amo
+    // Y me amas
+    // Para siempre
+    // 
+    // Olvidemos, el pasado
+    // Y vivamos
+    // El presente
+    // Lo que importa es
+    // Que me amas
+    // Y te amo
+    // Para siempre
+    // 
+    // Vale mucho un gran amor
+    // Que en el perdón a crecido
+    // Hoy sé que el llanto sirvió
+    // Para reforzar el nido
+    // 
+    // Olvidemos
+    // El pasado
+    // Y lo que diga la gente
+    // Lo que importa es
+    // Que te amo
+    // Y me amas
+    // Para siempre
+    // 
+    // Olvidemos, el pasado
+    // Y vivamos
+    // El presente
+    // Lo que importa es
+    // Que me amas
+    // Y te amo
+    // Para siempre
+
+    renderEngine(); // initial render
 </script>
 </body>
 </html>
