@@ -101,9 +101,7 @@
         }
         button:hover { background-color: #0051a8; }
         
-        .fix-btn {
-            background-color: #dc2626;
-        }
+        .fix-btn { background-color: #dc2626; }
         .fix-btn:hover { background-color: #b91c1c; }
         
         .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
@@ -137,6 +135,8 @@
         .preview-artist { font-style: italic; color: #666; margin-bottom: 20px; font-size: 14px; }
         .structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 14px; margin-bottom: 4px; color: #111; }
         .lyric-line { display: block; margin-bottom: 6px; line-height: 1.35; }
+        .lyric-line-spanish { display: block; margin-bottom: 6px; line-height: 1.35; font-weight: bold; }
+        .lyric-translation { display: block; margin-bottom: 2px; line-height: 1.3; color: #555; font-style: italic; font-size: 0.88em; }
         
         .action-btns { width: 100%; max-width: 360px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .secondary-btn { background-color: #6b7280; }
@@ -148,7 +148,6 @@
 <body>
 
 <div class="container">
-    <!-- Input Control Dashboard -->
     <div class="panel">
         <h2>🎤 Performance Settings</h2>
         
@@ -173,8 +172,13 @@
                 Enable Stage Phrase Compression (Combine brief lines)
             </label>
         </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="showTranslation">
+                Show English Translation for Spanish Songs <small style="color:#666;font-size:12px;">(powered by free translation)</small>
+            </label>
+        </div>
         
-        <!-- Action Control Buttons Grid Layout -->
         <div class="btn-grid">
             <button id="generateBtn">Fetch Lyrics</button>
             <button id="fixBtn" class="fix-btn">Not Correct? Find Alternative 🛠️</button>
@@ -182,17 +186,15 @@
         
         <div id="statusMessage" class="status"></div>
 
-        <!-- Manual Backup Fallback Input Box -->
         <div id="manualDrawer" class="drawer">
             <div class="form-group">
-                <label for="manualLyrics" style="color: #4b5563;">📝 Edit / Paste Lyrics Box</label>
+                <label for="manualLyrics" style="color: #4b5563;">📝 Edit / Paste Lyrics Box <small>(LRC timestamps are auto-removed)</small></label>
                 <textarea id="manualLyrics" placeholder="Paste or edit song components manually here..."></textarea>
             </div>
             <button id="updateManualBtn" style="background-color: #4f46e5;">Apply Custom Text Changes</button>
         </div>
     </div>
 
-    <!-- Smartphone Stage Simulator Layout Viewport -->
     <div class="phone-wrapper">
         <label style="margin-bottom: 10px; font-weight: bold;">📱 Mobile Viewport Preview</label>
         <div class="phone-frame" id="phoneFrame">
@@ -214,15 +216,78 @@
     var structuralMarkers = ["verse", "chorus", "bridge", "outro", "intro", "hook"];
     var autocompleteTimeout = null;
     window.lastFetchedLyrics = "";
+    window.translationLines = {};
+    window.translationPending = false;
+
+    async function fetchSpanishTranslation(lines) {
+        const translations = {};
+        const unique = [...new Set(lines.filter(l => l && l.trim().length > 0))];
+        
+        if (unique.length === 0) return {};
+        console.log(`Translating ${unique.length} Spanish lines using free MyMemory API...`);
+
+        const status = document.getElementById("statusMessage");
+        const prevStatus = status.innerText;
+
+        const batchSize = 8;
+        for (let i = 0; i < unique.length; i += batchSize) {
+            const batch = unique.slice(i, i + batchSize);
+            const promises = batch.map(async (line) => {
+                try {
+                    const encoded = encodeURIComponent(line);
+                    const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=es|en`;
+                    
+                    const response = await fetch(url, { 
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+            
+                    if (!response.ok) return null;
+                    
+                    const data = await response.json();
+                    if (data.responseData && data.responseData.translatedText) {
+                        return { original: line, translated: data.responseData.translatedText };
+                    }
+                    return null;
+                } catch (e) {
+                    console.warn("Translation failed for line:", line, e);
+                    return null;
+                }
+            });
+            const results = await Promise.all(promises);
+            results.forEach(r => {
+                if (r && r.translated) {
+                    translations[r.original] = r.translated;
+                }
+            });
+            if (i + batchSize < unique.length) {
+                await new Promise(resolve => setTimeout(resolve, 350));
+            }
+        }
+        
+        console.log(`✅ Translations loaded: ${Object.keys(translations).length} lines`);
+        status.className = "status success";
+        status.innerText = Object.keys(translations).length > 0 
+            ? "✅ Spanish → English translations loaded!" 
+            : (prevStatus || "");
+
+        return translations;
+    }
+
+    function detectSpanish(rawText) {
+        var spanishWords = ["que", "con", "una", "para", "como", "pero", "por", "amor", "corazon", "cuando", "todo", "eres", "estoy", "quiero", "vida", "noche", "solo", "siempre", "tu", "mi", "me", "te", "se", "es", "del", "las", "los", "hay", "tan", "mas", "sin", "hoy"];
+        var lower = rawText.toLowerCase().replace(/[áéíóúü]/g, function(c){ return {á:"a",é:"e",í:"i",ó:"o",ú:"u",ü:"u"}[c]||c; });
+        var hits = spanishWords.filter(function(w){ return new RegExp("\\b" + w + "\\b").test(lower); }).length;
+        return hits >= 4;
+    }
 
     function compressLyricsByParts(rawText, applyCompression) {
-        var cleanTimestamps = rawText.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, "");
+        var cleanTimestamps = rawText.replace(/\[\d{1,3}:\d{2}(:\d{2})?(\.\d{2,3})?\]/g, "");
         var rawLines = cleanTimestamps.replace(/\r\n/g, "\n").split("\n");
         var processedBlocks = [];
         var tempPair = [];
 
         var songTitle = document.getElementById("title").value.trim().toLowerCase();
-
         rawLines.forEach(function(line) {
             var cleanedLine = line.trim();
             var lowerLine = cleanedLine.toLowerCase();
@@ -248,7 +313,6 @@
             var isMarker = structuralMarkers.some(function(marker) { return lowerLine.indexOf(marker) !== -1; }) || 
                            (cleanedLine.indexOf("[") === 0 && cleanedLine.indexOf("]") !== -1) ||
                            (cleanedLine.indexOf("Verse") === 0) || (cleanedLine.indexOf("Bridge") === 0);
-
             if (isMarker) {
                 if (tempPair.length > 0) {
                     processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
@@ -264,7 +328,6 @@
 
             var wordCount = cleanedLine.split(/\s+/).length;
             var isShortHookPhrase = (wordCount < 4) || (songTitle && lowerLine.indexOf(songTitle) !== -1);
-
             if (applyCompression && !isShortHookPhrase && cleanedLine.length < 35) {
                 tempPair.push(cleanedLine);
                 if (tempPair.length === 2) {
@@ -288,17 +351,47 @@
     }
 
     async function fetchLyricsLrcLib(artist, title) {
-        var url = "https://lrclib.net/api/get?artist=" + encodeURIComponent(artist) + "&track_name=" + encodeURIComponent(title);
-        var response = await fetch(url);
-        if (!response.ok) throw new Error("Link down");
-        var data = await response.json();
-        return data.syncedLyrics || data.plainLyrics || "";
+        let url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+        console.log("🔍 Trying LRCLIB direct:", url);
+        
+        try {
+            let response = await fetch(url);
+            if (response.ok) {
+                let data = await response.json();
+                let lyrics = data.syncedLyrics || data.plainLyrics || "";
+                if (lyrics && lyrics.length > 100) {
+                    console.log("✅ LRCLIB direct success");
+                    return lyrics;
+                }
+            }
+        } catch(e) { console.warn("LRCLIB direct failed"); }
+
+        // Search fallback
+        try {
+            url = `https://lrclib.net/api/search?q=${encodeURIComponent(artist + " " + title)}`;
+            console.log("🔍 Trying LRCLIB search fallback:", url);
+            let response = await fetch(url);
+            if (response.ok) {
+                let results = await response.json();
+                if (Array.isArray(results) && results.length > 0) {
+                    let best = results[0];
+                    let lyrics = best.syncedLyrics || best.plainLyrics || "";
+                    if (lyrics && lyrics.length > 100) {
+                        console.log("✅ LRCLIB search success");
+                        return lyrics;
+                    }
+                }
+            }
+        } catch(e) { console.warn("LRCLIB search failed"); }
+        
+        return "";
     }
 
     async function fetchLyricsOvh(artist, title) {
         var url = "https://api.lyrics.ovh/v1/" + encodeURIComponent(artist) + "/" + encodeURIComponent(title);
+        console.log("🔍 Trying Original Server (Lyrics.ovh):", url);
         var response = await fetch(url);
-        if (!response.ok) throw new Error("Empty array");
+        if (!response.ok) throw new Error("Server response error");
         var data = await response.json();
         return data.lyrics || "";
     }
@@ -308,7 +401,9 @@
         var title = document.getElementById("title").value;
         var fontSize = document.getElementById("textSize").value;
         var compressChecked = document.getElementById("compression").checked;
+        var showTranslation = document.getElementById("showTranslation").checked;
         var rawLyrics = window.lastFetchedLyrics || "";
+        var isSpanish = rawLyrics ? detectSpanish(rawLyrics) : false;
 
         document.getElementById("pTitle").innerText = title ? title.toUpperCase() : "SONG TITLE";
         document.getElementById("pArtist").innerText = artist ? "Artist: " + artist : "Artist Name";
@@ -323,7 +418,7 @@
         }
 
         var formattedBlocks = compressLyricsByParts(rawLyrics, compressChecked);
-        
+        var useTranslation = showTranslation && isSpanish;
         formattedBlocks.forEach(function(block) {
             if (block.type === "break") {
                 bodyContainer.appendChild(document.createElement("br"));
@@ -334,12 +429,52 @@
                 el.innerText = block.text;
                 bodyContainer.appendChild(el);
             } else {
+                if (useTranslation && window.translationLines[block.text]) {
+                    var trans = document.createElement("span");
+                    trans.className = "lyric-translation";
+                    trans.style.fontSize = (parseFloat(fontSize) * 0.88) + "px";
+                    trans.innerText = window.translationLines[block.text];
+                    bodyContainer.appendChild(trans);
+                }
                 var el = document.createElement("span");
-                el.className = "lyric-line";
+                el.className = isSpanish && showTranslation ? "lyric-line-spanish" : "lyric-line";
                 el.innerText = block.text;
                 bodyContainer.appendChild(el);
             }
         });
+    }
+
+    async function renderWithTranslation() {
+        var rawLyrics = window.lastFetchedLyrics || "";
+        var showTranslation = document.getElementById("showTranslation").checked;
+        var isSpanishDetected = detectSpanish(rawLyrics);
+        if (!showTranslation || !rawLyrics || !isSpanishDetected) {
+            renderEngine();
+            return;
+        }
+        var compressChecked = document.getElementById("compression").checked;
+        var blocks = compressLyricsByParts(rawLyrics, compressChecked);
+        var lyricLines = blocks.filter(function(b){ return b.type === "line"; }).map(function(b){ return b.text; });
+        var uncached = lyricLines.filter(function(l){ return !window.translationLines[l]; });
+        if (uncached.length > 0) {
+            window.translationPending = true;
+            var status = document.getElementById("statusMessage");
+            var prevStatus = status.innerText;
+            status.className = "status warning";
+            status.innerText = "🌐 Fetching English translations for " + uncached.length + " lines...";
+            try {
+                var result = await fetchSpanishTranslation(uncached);
+                Object.assign(window.translationLines, result);
+                status.className = "status success";
+                status.innerText = Object.keys(result).length > 0 ? "✅ Translations loaded!" : (prevStatus || "");
+            } catch(e) {
+                status.className = "status error";
+                status.innerText = "⚠️ Translation fetch failed.";
+            } finally {
+                window.translationPending = false;
+            }
+        }
+        renderEngine();
     }
 
     document.getElementById("searchQuery").addEventListener("input", function(e) {
@@ -355,47 +490,77 @@
         }
 
         autocompleteTimeout = setTimeout(async function() {
+            // First Priority: Try Original Server Suggestion
             try {
                 var res = await fetch("https://api.lyrics.ovh/suggest/" + encodeURIComponent(value));
+                if (res.ok) {
+                    var payload = await res.json();
+                    var tracks = payload.data || [];
+                    if (tracks.length > 0) {
+                        dropdown.innerHTML = "";
+                        tracks.slice(0, 7).forEach(function(track) {
+                            var item = document.createElement("div");
+                            item.className = "suggestion-item";
+                            var details = document.createElement("div");
+                            var sTitle = document.createElement("span");
+                            sTitle.className = "song-title";
+                            sTitle.innerText = track.title;
+                            var sArtist = document.createElement("span");
+                            sArtist.className = "artist-name";
+                            sArtist.innerText = " by " + track.artist.name;
+                            
+                            details.appendChild(sTitle);
+                            details.appendChild(sArtist);
+                            item.appendChild(details);
+                            item.addEventListener("click", function() {
+                                document.getElementById("searchQuery").value = track.title + " - " + track.artist.name;
+                                document.getElementById("artist").value = track.artist.name;
+                                document.getElementById("title").value = track.title;
+                                dropdown.style.display = "none";
+                                document.getElementById("generateBtn").click();
+                            });
+                            dropdown.appendChild(item);
+                        });
+                        dropdown.style.display = "block";
+                        return; // Successfully used original server
+                    }
+                }
+            } catch (err) { console.log("Original server auto-suggest failed, trying fallback..."); }
+
+            // Second Priority Backup: Try LRCLIB search if original server is down
+            try {
+                var res = await fetch("https://lrclib.net/api/search?q=" + encodeURIComponent(value));
                 if (!res.ok) return;
-                var payload = await res.json();
-                var tracks = payload.data || [];
+                var tracks = await res.json();
 
                 dropdown.innerHTML = "";
-                if (tracks.length === 0) { dropdown.style.display = "none"; return; }
+                if (!Array.isArray(tracks) || tracks.length === 0) { dropdown.style.display = "none"; return; }
 
                 tracks.slice(0, 7).forEach(function(track) {
                     var item = document.createElement("div");
                     item.className = "suggestion-item";
-                    
                     var details = document.createElement("div");
                     var sTitle = document.createElement("span");
                     sTitle.className = "song-title";
-                    sTitle.innerText = track.title;
-                    
+                    sTitle.innerText = track.name;
                     var sArtist = document.createElement("span");
                     sArtist.className = "artist-name";
-                    sArtist.innerText = " by " + track.artist.name;
+                    sArtist.innerText = " by " + track.artistName;
                     
                     details.appendChild(sTitle);
                     details.appendChild(sArtist);
                     item.appendChild(details);
-
                     item.addEventListener("click", function() {
-                        document.getElementById("searchQuery").value = track.title + " - " + track.artist.name;
-                        document.getElementById("artist").value = track.artist.name;
-                        document.getElementById("title").value = track.title;
+                        document.getElementById("searchQuery").value = track.name + " - " + track.artistName;
+                        document.getElementById("artist").value = track.artistName;
+                        document.getElementById("title").value = track.name;
                         dropdown.style.display = "none";
                         document.getElementById("generateBtn").click();
                     });
-
                     dropdown.appendChild(item);
                 });
-
                 dropdown.style.display = "block";
-            } catch (err) {
-                console.log("Telemetry check skipped.");
-            }
+            } catch (err) { console.log("All auto-suggest networks down."); }
         }, 300);
     });
 
@@ -409,8 +574,12 @@
         document.getElementById("sizeVal").innerText = e.target.value;
         renderEngine();
     });
-    
+
     document.getElementById("compression").addEventListener("change", renderEngine);
+    document.getElementById("showTranslation").addEventListener("change", function() {
+        window.translationLines = {};
+        renderWithTranslation();
+    });
 
     function parseInputFields() {
         var inputVal = document.getElementById("searchQuery").value.trim();
@@ -430,14 +599,18 @@
         var status = document.getElementById("statusMessage");
         var lyricsBuffer = "";
         
+        status.innerText = "🔍 Trying Original Server (Lyrics.ovh)...";
+        try {
+            lyricsBuffer = await fetchLyricsOvh(customArtist, customTitle);
+            if (lyricsBuffer && lyricsBuffer.length > 150) return lyricsBuffer;
+        } catch (e) { console.log("Original server failed, attempting LRCLIB fallback..."); }
+        
+        status.innerText = "🔍 Trying Backup Network (LRCLIB)...";
         try {
             lyricsBuffer = await fetchLyricsLrcLib(customArtist, customTitle);
-            if (!lyricsBuffer || lyricsBuffer.length < 250) throw new Error();
-        } catch (e) {
-            try {
-                lyricsBuffer = await fetchLyricsOvh(customArtist, customTitle);
-            } catch(err){}
-        }
+            if (lyricsBuffer && lyricsBuffer.length > 150) return lyricsBuffer;
+        } catch(err){}
+        
         return lyricsBuffer;
     }
 
@@ -454,26 +627,27 @@
         }
 
         status.className = "status";
-        status.innerText = "🔍 Connecting to database infrastructure node...";
+        status.innerText = "🔍 Looking up lyrics...";
 
         var result = await executeLookupPipeline(artist, title);
 
-        if (result && result.trim().length > 100) {
+        if (result && result.trim().length > 150) {
             window.lastFetchedLyrics = result;
+            window.translationLines = {};
             document.getElementById("manualLyrics").value = result;
             status.className = "status success";
-            status.innerText = "🎉 Full lyric sheet successfully compiled!";
-            renderEngine();
+            status.innerText = "🎉 Lyrics loaded successfully!";
+            await renderWithTranslation();
         } else {
             window.lastFetchedLyrics = "";
+            window.translationLines = {};
             document.getElementById("manualLyrics").value = "";
             status.className = "status warning";
-            status.innerText = "⚠️ Short/broken entry found on current index. Click the red 'Find Alternative' button to mutate search parameters.";
+            status.innerText = "⚠️ Could not find full lyrics automatically. Paste manually below 👇";
             renderEngine();
         }
     });
 
-    // RE-ENGINEERED AUTOMATIC DEEP SEARCH MUTATOR ACTION
     document.getElementById("fixBtn").addEventListener("click", async function() {
         parseInputFields();
         var artist = document.getElementById("artist").value.trim();
@@ -487,48 +661,42 @@
         }
 
         status.className = "status warning";
-        status.innerText = "🛠️ Mutating search parameters to bypass corrupted file records...";
+        status.innerText = "🛠️ Searching alternative combinations...";
 
-        var mutatedResult = "";
+        var mutatedResult = await executeLookupPipeline("", title);
+        if (!mutatedResult || mutatedResult.length < 250) mutatedResult = await executeLookupPipeline(artist, title + " lyrics");
 
-        // Strategy A: Clear out specific cover-artist strings and query the original classical standard entries
-        if (title.toLowerCase() === "blue moon") {
-            mutatedResult = await executeLookupPipeline("Frank Sinatra", "Blue Moon");
-            if (mutatedResult) {
-                document.getElementById("artist").value = "Dean Martin (Stage Version)";
-            }
-        }
-        
-        // Strategy B: If still blank or processing general tracks, drop specific artists and scan standard titles
-        if (!mutatedResult || mutatedResult.length < 250) {
-            mutatedResult = await executeLookupPipeline("", title + " standard");
-        }
-
-        // Strategy C: Casing array lookups
-        if (!mutatedResult || mutatedResult.length < 250) {
-            mutatedResult = await executeLookupPipeline(artist, title + " lyrics");
-        }
-
-        if (mutatedResult && mutatedResult.trim().length > 250) {
+        if (mutatedResult && mutatedResult.trim().length > 150) {
             window.lastFetchedLyrics = mutatedResult;
+            window.translationLines = {};
             document.getElementById("manualLyrics").value = mutatedResult;
             status.className = "status success";
-            status.innerText = "🎉 Alternative network node located! Full performance layout generated.";
-            renderEngine();
+            status.innerText = "🎉 Alternative lyrics found!";
+            await renderWithTranslation();
         } else {
             status.className = "status error";
-            status.innerText = "❌ Automated bypass exhausted. Use the Edit Box below to manually add custom arrangement variants.";
+            status.innerText = "❌ Still couldn't find it. Paste the lyrics manually below.";
         }
     });
 
     document.getElementById("updateManualBtn").addEventListener("click", function() {
-        var manualText = document.getElementById("manualLyrics").value;
-        if (!manualText.trim()) {
+        let manualText = document.getElementById("manualLyrics").value.trim();
+        if (!manualText) {
             alert("The text container box is empty.");
             return;
         }
-        window.lastFetchedLyrics = manualText;
-        renderEngine();
+        
+        const cleaned = manualText.replace(/\[\d{1,3}:\d{2}(:\d{2})?(\.\d{2,3})?\]/g, "").trim();
+        
+        window.lastFetchedLyrics = cleaned;
+        window.translationLines = {};
+        document.getElementById("manualLyrics").value = cleaned;
+        
+        const status = document.getElementById("statusMessage");
+        status.className = "status success";
+        status.innerText = "✅ Manual lyrics applied & cleaned!";
+        
+        renderWithTranslation();
     });
 
     document.getElementById("copyBtn").addEventListener("click", function() {
@@ -563,7 +731,6 @@
     function generateGDocsHtmlDocument() {
         var content = document.getElementById("previewContainer").innerHTML;
         var fontSize = document.getElementById("textSize").value;
-        
         return "<html><head><meta charset='UTF-8'><title>Lyric Sheet</title><style>" +
             "@page { margin: 0.75in 0.75in 0.75in 0.75in; }" +
             "body { font-family: Arial, sans-serif; width: 100%; margin: 0; padding: 0; line-height: 1.4; color: #000000; background-color: #ffffff; }" +
@@ -571,19 +738,17 @@
             ".preview-artist { font-style: italic; color: #555555; margin-bottom: 24px; font-size: 14px; display: block; }" +
             ".structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 16px; margin-bottom: 6px; color: #111111; font-size: " + (parseFloat(fontSize) + 2) + "pt; }" +
             ".lyric-line { display: block; margin-bottom: 6px; font-size: " + fontSize + "pt; color: #000000; width: 100%; clear: both; }" +
+            ".lyric-line-spanish { display: block; margin-bottom: 6px; font-size: " + fontSize + "pt; font-weight: bold; color: #000000; width: 100%; clear: both; }" +
+            ".lyric-translation { display: block; margin-bottom: 2px; font-size: " + (parseFloat(fontSize) * 0.88) + "pt; color: #555555; font-style: italic; width: 100%; clear: both; }" +
             "</style></head><body>" + content + "</body></html>";
     }
 
     document.getElementById("printBtn").addEventListener("click", function() {
         var printWindow = window.open("", "_blank");
         var htmlPayload = generateGDocsHtmlDocument();
-            
         printWindow.document.write(htmlPayload);
         printWindow.document.close();
-        
-        setTimeout(function() {
-            printWindow.print();
-        }, 250);
+        setTimeout(function() { printWindow.print(); }, 250);
     });
 
     document.getElementById("gdocsBtn").addEventListener("click", function() {
@@ -592,7 +757,6 @@
         
         var blob = new Blob([htmlPayload], { type: "text/html;charset=utf-8" });
         var link = document.createElement("a");
-        
         link.href = URL.createObjectURL(blob);
         link.download = title + " - Mobile Lyric Sheet.html";
         
@@ -600,12 +764,7 @@
         link.click();
         document.body.removeChild(link);
         
-        alert(
-            "⚡ Step 1: Your optimized file has downloaded.\n\n" +
-            "⚡ Step 2: Drag it into your Google Drive.\n\n" +
-            "⚡ Step 3: Right-click it in Drive, select 'Open with' -> 'Google Docs'.\n\n" +
-            "It will now expand beautifully across the entire document canvas!"
-        );
+        alert("⚡ File downloaded! Drag into Google Drive → Open with → Google Docs.");
     });
 
     renderEngine();
