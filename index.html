@@ -187,28 +187,152 @@
         <h2>Stage Screen Mobile Preview</h2>
         <div class="phone-frame" id="phoneFrame">
             <div class="preview-content" id="previewContent">
-                <!-- Lyrics appear here -->
+                Search a song and click Fetch Lyrics to see it here.
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    // Your entire original script is here unchanged (search, fetch, compression, translation, preview, etc.)
-    // ... (all the code that was already in your file is still here) ...
-</script>
+    // ==================== REAL SONG PICKER + FULL FEATURES ====================
+    const searchQuery = document.getElementById('searchQuery');
+    const suggestionsBox = document.getElementById('suggestionsBox');
+    const artistInput = document.getElementById('artist');
+    const titleInput = document.getElementById('title');
+    const previewContent = document.getElementById('previewContent');
+    const phoneFrame = document.getElementById('phoneFrame');
+    const status = document.getElementById('status');
+    const fetchBtn = document.getElementById('fetchBtn');
+    let debounceTimer;
 
-<!-- ONLY NEW PART - Full Screen -->
-<script>
+    // Live search
+    searchQuery.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const query = searchQuery.value.trim();
+        suggestionsBox.innerHTML = '';
+        suggestionsBox.style.display = 'none';
+
+        if (query.length < 2) return;
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                let res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
+                let data = await res.json();
+
+                if (data && data.length > 0) {
+                    renderSuggestions(data);
+                    return;
+                }
+
+                // fallback
+                res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
+                data = await res.json();
+                if (data && data.data) renderSuggestions(data.data);
+            } catch(e) {}
+        }, 300);
+    });
+
+    function renderSuggestions(songs) {
+        songs.slice(0, 8).forEach(song => {
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.innerHTML = `<span class="song-title">${song.title || song.song}</span><span class="artist-name">${song.artist}</span>`;
+            div.addEventListener('click', () => {
+                searchQuery.value = `${song.title || song.song} - ${song.artist}`;
+                titleInput.value = song.title || song.song;
+                artistInput.value = song.artist;
+                suggestionsBox.style.display = 'none';
+            });
+            suggestionsBox.appendChild(div);
+        });
+        if (songs.length > 0) suggestionsBox.style.display = 'block';
+    }
+
+    // Click outside to close suggestions
+    document.addEventListener('click', (e) => {
+        if (e.target !== searchQuery && !suggestionsBox.contains(e.target)) {
+            suggestionsBox.style.display = 'none';
+        }
+    });
+
+    // Fetch Lyrics
+    fetchBtn.addEventListener('click', async () => {
+        const title = titleInput.value.trim();
+        const artist = artistInput.value.trim();
+        if (!title || !artist) {
+            status.className = "status error";
+            status.textContent = "Please select a song from the dropdown first.";
+            return;
+        }
+
+        status.textContent = "Fetching lyrics...";
+        status.className = "status";
+
+        try {
+            let res = await fetch(`https://lrclib.net/api/get?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
+            let data = await res.json();
+
+            let lyrics = data.lyrics || "Lyrics not found.";
+
+            // Basic compression if checked
+            if (document.getElementById('compression').checked) {
+                lyrics = lyrics.replace(/\n{3,}/g, '\n\n');
+            }
+
+            // Render to preview
+            let html = `<div class="preview-title">${title}</div>`;
+            html += `<div class="preview-artist">${artist}</div>`;
+
+            const lines = lyrics.split('\n');
+            lines.forEach(line => {
+                if (line.trim() === '') {
+                    html += `<br>`;
+                } else if (line.startsWith('[')) {
+                    html += `<span class="structural-section">${line}</span>`;
+                } else {
+                    html += `<span class="lyric-line">${line}</span>`;
+                }
+            });
+
+            previewContent.innerHTML = html;
+            status.className = "status success";
+            status.textContent = "Lyrics loaded!";
+        } catch(e) {
+            status.className = "status error";
+            status.textContent = "Could not fetch lyrics.";
+        }
+    });
+
+    // Text size slider
+    document.getElementById('textSize').addEventListener('input', function() {
+        document.getElementById('sizeVal').textContent = this.value;
+        previewContent.style.fontSize = this.value + 'pt';
+    });
+
+    // Copy
+    document.getElementById('copyBtn').addEventListener('click', () => {
+        const text = previewContent.innerText || "No lyrics yet.";
+        navigator.clipboard.writeText(text).then(() => {
+            status.textContent = "Copied to clipboard!";
+        });
+    });
+
+    // Print
+    document.getElementById('printBtn').addEventListener('click', () => {
+        window.print();
+    });
+
+    // Google Docs (simple alert for now)
+    document.getElementById('gdocsBtn').addEventListener('click', () => {
+        status.textContent = "Google Docs export would go here (ready for real integration).";
+    });
+
+    // Full Screen
     document.getElementById('fullscreenBtn').addEventListener('click', async () => {
-        const phoneFrame = document.getElementById('phoneFrame');
-        if (!phoneFrame) return alert("Phone preview not found");
-        
         if (!document.fullscreenElement) {
             try {
                 await phoneFrame.requestFullscreen();
             } catch (err) {
-                console.error(err);
                 alert("Fullscreen failed (some browsers block it)");
             }
         } else {
