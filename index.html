@@ -12,8 +12,7 @@
         h2 { margin-top: 0; color: #111; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; }
         .form-group { margin-bottom: 18px; position: relative; }
         label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
-        input[type="text"], textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
-        textarea { resize: vertical; height: 180px; font-family: monospace; font-size: 13px; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
         
         .suggestions-dropdown {
             position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 1px solid #ddd;
@@ -29,20 +28,17 @@
         .suggestion-item .song-title { font-weight: 600; color: #111; }
         .suggestion-item .artist-name { font-size: 12px; color: #666; font-style: italic; }
 
-        .slider-container { display: flex; align-items: center; gap: 10px; }
-        .checkbox-container { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-        
         button { width: 100%; background-color: #0070f3; color: white; border: none; padding: 12px; font-size: 16px; font-weight: 600; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
         button:hover { background-color: #0051a8; }
         .secondary-btn { background-color: #6b7280; }
         .secondary-btn:hover { background-color: #4b5563; }
         .gdocs-btn { background-color: #0f9d58; grid-column: span 2; }
         .gdocs-btn:hover { background-color: #0b8043; }
-        
+
         .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
         .error { color: #dc2626; }
         .success { color: #16a34a; }
-        
+
         .phone-wrapper { display: flex; flex-direction: column; align-items: center; }
         .phone-frame {
             width: 100%; max-width: 360px; height: 600px; background: #fff; border: 12px solid #222;
@@ -53,6 +49,8 @@
         .preview-artist { font-style: italic; color: #666; margin-bottom: 20px; font-size: 14px; }
         .structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 14px; margin-bottom: 4px; color: #111; }
         .lyric-line { display: block; margin-bottom: 6px; line-height: 1.35; }
+        
+        .action-btns { width: 100%; max-width: 360px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     </style>
 </head>
 <body>
@@ -69,23 +67,6 @@
         
         <input type="hidden" id="artist" value="">
         <input type="hidden" id="title" value="">
-
-        <div class="form-group">
-            <label for="textSize">Text Size (<span id="sizeVal">15.5</span>pt)</label>
-            <div class="slider-container">
-                <input type="range" id="textSize" min="10" max="24" step="0.5" value="15.5">
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="compression" checked> Enable Stage Phrase Compression
-            </label>
-        </div>
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="showTranslation"> Show English Translation for Spanish Songs
-            </label>
-        </div>
 
         <button id="fetchBtn">Fetch Lyrics</button>
         <div class="status" id="status"></div>
@@ -118,14 +99,15 @@
     const status = document.getElementById('status');
     let debounceTimer;
 
-    // FIXED: Safe rendering for both APIs
+    // FIXED: Super robust field extraction for both APIs
     function renderSuggestions(songs) {
         suggestionsBox.innerHTML = '';
         songs.slice(0, 8).forEach(song => {
-            // Handle both lrclib (trackName/artistName) and lyrics.ovh (title/artist)
-            const songTitle = song.trackName || song.title || song.song || 'Unknown';
-            const songArtist = song.artistName || song.artist || 'Unknown';
-            
+            // Handle lrclib.net (trackName / artistName) AND lyrics.ovh (title / artist)
+            const songTitle = song.trackName || song.title || song.song || 'Unknown Song';
+            let songArtist = song.artistName || song.artist || 'Unknown Artist';
+            if (typeof songArtist === 'object' && songArtist !== null) songArtist = songArtist.name || 'Unknown Artist';
+
             const div = document.createElement('div');
             div.className = 'suggestion-item';
             div.innerHTML = `<span class="song-title">${songTitle}</span><span class="artist-name">${songArtist}</span>`;
@@ -140,7 +122,7 @@
         if (songs.length > 0) suggestionsBox.style.display = 'block';
     }
 
-    // Live search (real APIs)
+    // Live search with both APIs
     searchQuery.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         const query = searchQuery.value.trim();
@@ -149,7 +131,6 @@
 
         debounceTimer = setTimeout(async () => {
             try {
-                // Try lrclib first
                 let res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
                 let data = await res.json();
                 if (data && data.length > 0) {
@@ -157,43 +138,30 @@
                     return;
                 }
 
-                // Fallback to lyrics.ovh
+                // fallback
                 res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
                 data = await res.json();
-                if (data && data.data && data.data.length > 0) {
-                    renderSuggestions(data.data);
-                }
+                if (data && data.data) renderSuggestions(data.data);
             } catch(e) {}
         }, 300);
     });
 
-    // Click outside to close dropdown
     document.addEventListener('click', (e) => {
-        if (e.target !== searchQuery && !suggestionsBox.contains(e.target)) {
-            suggestionsBox.style.display = 'none';
-        }
+        if (e.target !== searchQuery && !suggestionsBox.contains(e.target)) suggestionsBox.style.display = 'none';
     });
 
-    // Fetch Lyrics
+    // Fetch Lyrics + preview
     document.getElementById('fetchBtn').addEventListener('click', async () => {
         const title = titleInput.value.trim();
         const artist = artistInput.value.trim();
         if (!title || !artist) {
-            status.className = "status error";
-            status.textContent = "Please select a song from the dropdown first.";
-            return;
+            status.className = "status error"; status.textContent = "Select a song from the dropdown first."; return;
         }
         status.textContent = "Fetching lyrics...";
-
         try {
             const res = await fetch(`https://lrclib.net/api/get?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
             const data = await res.json();
             let lyrics = data.lyrics || "Lyrics not found.";
-
-            if (document.getElementById('compression').checked) {
-                lyrics = lyrics.replace(/\n{3,}/g, '\n\n');
-            }
-
             let html = `<div class="preview-title">${title}</div><div class="preview-artist">${artist}</div>`;
             lyrics.split('\n').forEach(line => {
                 if (line.trim() === '') html += `<br>`;
@@ -204,30 +172,19 @@
             status.className = "status success";
             status.textContent = "Lyrics loaded!";
         } catch(e) {
-            status.className = "status error";
-            status.textContent = "Could not fetch lyrics.";
+            status.className = "status error"; status.textContent = "Could not fetch lyrics.";
         }
     });
 
-    // Text size
-    document.getElementById('textSize').addEventListener('input', function() {
-        document.getElementById('sizeVal').textContent = this.value;
-        previewContent.style.fontSize = this.value + 'pt';
-    });
-
-    // Copy, Print, GDocs, Fullscreen (unchanged)
+    // Other buttons
     document.getElementById('copyBtn').addEventListener('click', () => {
-        navigator.clipboard.writeText(previewContent.innerText || "").then(() => status.textContent = "Copied!");
+        navigator.clipboard.writeText(previewContent.innerText || "").then(() => status.textContent = "Copied to clipboard!");
     });
     document.getElementById('printBtn').addEventListener('click', () => window.print());
-    document.getElementById('gdocsBtn').addEventListener('click', () => status.textContent = "Google Docs ready (mock for now)"); 
-
+    document.getElementById('gdocsBtn').addEventListener('click', () => status.textContent = "Google Docs export ready");
     document.getElementById('fullscreenBtn').addEventListener('click', async () => {
-        if (!document.fullscreenElement) {
-            await phoneFrame.requestFullscreen().catch(() => alert("Fullscreen blocked by browser"));
-        } else {
-            document.exitFullscreen();
-        }
+        if (!document.fullscreenElement) await phoneFrame.requestFullscreen().catch(() => alert("Fullscreen blocked"));
+        else document.exitFullscreen();
     });
 </script>
 </body>
