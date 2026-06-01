@@ -99,15 +99,15 @@
     const status = document.getElementById('status');
     let debounceTimer;
 
-    // FIXED: Super robust field extraction for both APIs
+    // BULLETPROOF field extraction (fixed for both APIs)
     function renderSuggestions(songs) {
         suggestionsBox.innerHTML = '';
         songs.slice(0, 8).forEach(song => {
-            // Handle lrclib.net (trackName / artistName) AND lyrics.ovh (title / artist)
-            const songTitle = song.trackName || song.title || song.song || 'Unknown Song';
+            const songTitle = song.trackName || song.title || song.name || song.song || 'Unknown Song';
             let songArtist = song.artistName || song.artist || 'Unknown Artist';
-            if (typeof songArtist === 'object' && songArtist !== null) songArtist = songArtist.name || 'Unknown Artist';
-
+            if (typeof songArtist === 'object' && songArtist !== null) {
+                songArtist = songArtist.name || 'Unknown Artist';
+            }
             const div = document.createElement('div');
             div.className = 'suggestion-item';
             div.innerHTML = `<span class="song-title">${songTitle}</span><span class="artist-name">${songArtist}</span>`;
@@ -122,7 +122,7 @@
         if (songs.length > 0) suggestionsBox.style.display = 'block';
     }
 
-    // Live search with both APIs
+    // Live search
     searchQuery.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         const query = searchQuery.value.trim();
@@ -131,14 +131,14 @@
 
         debounceTimer = setTimeout(async () => {
             try {
+                // Primary API
                 let res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
                 let data = await res.json();
                 if (data && data.length > 0) {
                     renderSuggestions(data);
                     return;
                 }
-
-                // fallback
+                // Fallback API
                 res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
                 data = await res.json();
                 if (data && data.data) renderSuggestions(data.data);
@@ -150,7 +150,7 @@
         if (e.target !== searchQuery && !suggestionsBox.contains(e.target)) suggestionsBox.style.display = 'none';
     });
 
-    // Fetch Lyrics + preview
+    // Fetch Lyrics
     document.getElementById('fetchBtn').addEventListener('click', async () => {
         const title = titleInput.value.trim();
         const artist = artistInput.value.trim();
@@ -178,7 +178,7 @@
 
     // Other buttons
     document.getElementById('copyBtn').addEventListener('click', () => {
-        navigator.clipboard.writeText(previewContent.innerText || "").then(() => status.textContent = "Copied to clipboard!");
+        navigator.clipboard.writeText(previewContent.innerText || "").then(() => status.textContent = "Copied!");
     });
     document.getElementById('printBtn').addEventListener('click', () => window.print());
     document.getElementById('gdocsBtn').addEventListener('click', () => status.textContent = "Google Docs export ready");
