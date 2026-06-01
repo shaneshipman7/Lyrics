@@ -208,7 +208,6 @@
             <button class="secondary-btn" id="copyBtn">Copy Text</button>
             <button class="secondary-btn" id="printBtn">Print / PDF</button>
             <button class="gdocs-btn" id="gdocsBtn">Create Google Docs File</button>
-            <button class="secondary-btn" id="fullscreenBtn">⛶ Full Screen</button>
         </div>
     </div>
 </div>
@@ -769,27 +768,6 @@
     });
 
     renderEngine();
-
-    <!-- === FULL SCREEN BUTTON - ONLY ADDITION === -->
-    <script>
-    document.getElementById('fullscreenBtn').addEventListener('click', async () => {
-        const phoneFrame = document.getElementById('phoneFrame');
-        if (!phoneFrame) {
-            alert("Phone preview not found");
-            return;
-        }
-        if (!document.fullscreenElement) {
-            try {
-                await phoneFrame.requestFullscreen();
-            } catch (err) {
-                console.error(err);
-                alert("Fullscreen not supported or blocked by your browser.");
-            }
-        } else {
-            document.exitFullscreen();
-        }
-    });
-    </script>
 </script>
 </body>
 </html>
