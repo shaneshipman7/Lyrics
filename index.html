@@ -5,70 +5,205 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Performance Lyric Sheet Generator</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f6f8; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
-        .panel { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f4f6f8;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+        .panel {
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            position: relative;
+        }
         h2 { margin-top: 0; color: #111; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; }
         .form-group { margin-bottom: 18px; position: relative; }
         label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
-        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+        textarea {
+            resize: vertical;
+            height: 180px;
+            font-family: monospace;
+            font-size: 13px;
+        }
         
+        /* Autocomplete Suggestions Panel */
         .suggestions-dropdown {
-            position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 1px solid #ddd;
-            border-radius: 6px; box-shadow: 0 6px 16px rgba(0,0,0,0.1); max-height: 240px; overflow-y: auto;
-            z-index: 999; margin-top: 4px; display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            max-height: 240px;
+            overflow-y: auto;
+            z-index: 999;
+            margin-top: 4px;
+            display: none;
         }
         .suggestion-item {
-            padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 14px;
-            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .suggestion-item:last-child { border-bottom: none; }
         .suggestion-item:hover { background-color: #f0f7ff; }
         .suggestion-item .song-title { font-weight: 600; color: #111; }
         .suggestion-item .artist-name { font-size: 12px; color: #666; font-style: italic; }
 
-        button { width: 100%; background-color: #0070f3; color: white; border: none; padding: 12px; font-size: 16px; font-weight: 600; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+        .slider-container { display: flex; align-items: center; gap: 10px; }
+        .slider-container input { flex: 1; }
+        .checkbox-container { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            width: 100%;
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
         button:hover { background-color: #0051a8; }
-        .secondary-btn { background-color: #6b7280; }
-        .secondary-btn:hover { background-color: #4b5563; }
-        .gdocs-btn { background-color: #0f9d58; grid-column: span 2; }
-        .gdocs-btn:hover { background-color: #0b8043; }
+        
+        .fix-btn { background-color: #dc2626; }
+        .fix-btn:hover { background-color: #b91c1c; }
         
         .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
         .error { color: #dc2626; }
         .success { color: #16a34a; }
+        .warning { color: #d97706; }
         
+        .drawer {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #ddd;
+            display: block;
+        }
+        
+        /* Mobile Simulator Preview Frame */
         .phone-wrapper { display: flex; flex-direction: column; align-items: center; }
         .phone-frame {
-            width: 100%; max-width: 360px; height: 600px; background: #fff; border: 12px solid #222;
-            border-radius: 36px; box-shadow: 0 12px 24px rgba(0,0,0,0.15); overflow-y: auto; padding: 20px; box-sizing: border-box;
+            width: 100%;
+            max-width: 360px;
+            height: 600px;
+            background: #fff;
+            border: 12px solid #222;
+            border-radius: 36px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
         }
         .preview-content { white-space: pre-wrap; word-wrap: break-word; }
         .preview-title { font-weight: bold; margin-bottom: 4px; text-transform: uppercase; font-size: 20px; }
         .preview-artist { font-style: italic; color: #666; margin-bottom: 20px; font-size: 14px; }
         .structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 14px; margin-bottom: 4px; color: #111; }
         .lyric-line { display: block; margin-bottom: 6px; line-height: 1.35; }
+        .lyric-line-spanish { display: block; margin-bottom: 6px; line-height: 1.35; font-weight: bold; }
+        .lyric-translation { display: block; margin-bottom: 2px; line-height: 1.3; color: #555; font-style: italic; font-size: 0.88em; }
+        
+        .action-btns { width: 100%; max-width: 360px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .secondary-btn { background-color: #6b7280; }
+        .secondary-btn:hover { background-color: #4b5563; }
+        .gdocs-btn { background-color: #0f9d58; grid-column: span 2; }
+        .gdocs-btn:hover { background-color: #0b8043; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="panel">
-        <h2>Performance Settings</h2>
+        <h2>🎤 Performance Settings</h2>
         
         <div class="form-group">
             <label for="searchQuery">Search Song or Artist</label>
-            <input type="text" id="searchQuery" placeholder="Type song title or artist..." autocomplete="off">
+            <input type="text" id="searchQuery" value="" placeholder="Type song title or artist..." autocomplete="off">
             <div id="suggestionsBox" class="suggestions-dropdown"></div>
         </div>
         
         <input type="hidden" id="artist" value="">
         <input type="hidden" id="title" value="">
 
-        <button id="fetchBtn">Fetch Lyrics</button>
-        <div class="status" id="status"></div>
+        <div class="form-group">
+            <label for="textSize">Text Size (<span id="sizeVal">15.5</span>pt)</label>
+            <div class="slider-container">
+                <input type="range" id="textSize" min="10" max="24" step="0.5" value="15.5">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="compression" checked>
+                Enable Stage Phrase Compression (Combine brief lines)
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="showTranslation">
+                Show English Translation for Spanish Songs <small style="color:#666;font-size:12px;">(powered by free translation)</small>
+            </label>
+        </div>
+        
+        <div class="btn-grid">
+            <button id="generateBtn">Fetch Lyrics</button>
+            <button id="fixBtn" class="fix-btn">Not Correct? Find Alternative 🛠️</button>
+        </div>
+        
+        <div id="statusMessage" class="status"></div>
 
+        <div id="manualDrawer" class="drawer">
+            <div class="form-group">
+                <label for="manualLyrics" style="color: #4b5563;">📝 Edit / Paste Lyrics Box <small>(LRC timestamps are auto-removed)</small></label>
+                <textarea id="manualLyrics" placeholder="Paste or edit song components manually here..."></textarea>
+            </div>
+            <button id="updateManualBtn" style="background-color: #4f46e5;">Apply Custom Text Changes</button>
+        </div>
+    </div>
+
+    <div class="phone-wrapper">
+        <label style="margin-bottom: 10px; font-weight: bold;">📱 Mobile Viewport Preview</label>
+        <div class="phone-frame" id="phoneFrame">
+            <div id="previewContainer" class="preview-content">
+                <div class="preview-title" id="pTitle">SONG TITLE</div>
+                <div class="preview-artist" id="pArtist">Artist Name</div>
+                <div id="pBody">Search a track above to construct layout rules.</div>
+            </div>
+        </div>
         <div class="action-btns">
             <button class="secondary-btn" id="copyBtn">Copy Text</button>
             <button class="secondary-btn" id="printBtn">Print / PDF</button>
@@ -76,117 +211,585 @@
             <button class="secondary-btn" id="fullscreenBtn">⛶ Full Screen</button>
         </div>
     </div>
-
-    <div class="panel phone-wrapper">
-        <h2>Stage Screen Mobile Preview</h2>
-        <div class="phone-frame" id="phoneFrame">
-            <div class="preview-content" id="previewContent">
-                Search a song above and click Fetch Lyrics
-            </div>
-        </div>
-    </div>
 </div>
 
 <script>
-    const searchQuery = document.getElementById('searchQuery');
-    const suggestionsBox = document.getElementById('suggestionsBox');
-    const titleInput = document.getElementById('title');
-    const artistInput = document.getElementById('artist');
-    const previewContent = document.getElementById('previewContent');
-    const phoneFrame = document.getElementById('phoneFrame');
-    const status = document.getElementById('status');
-    let debounceTimer;
+    var structuralMarkers = ["verse", "chorus", "bridge", "outro", "intro", "hook"];
+    var autocompleteTimeout = null;
+    window.lastFetchedLyrics = "";
+    window.translationLines = {};
+    window.translationPending = false;
 
-    // Song picker (already working for you)
-    searchQuery.addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        const query = searchQuery.value.trim();
-        suggestionsBox.style.display = 'none';
-        if (query.length < 2) return;
+    async function fetchSpanishTranslation(lines) {
+        const translations = {};
+        const unique = [...new Set(lines.filter(l => l && l.trim().length > 0))];
+        
+        if (unique.length === 0) return {};
+        console.log(`Translating ${unique.length} Spanish lines using free MyMemory API...`);
 
-        debounceTimer = setTimeout(async () => {
-            try {
-                let res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
-                let data = await res.json();
-                if (data && data.length > 0) {
-                    renderSuggestions(data);
-                    return;
+        const status = document.getElementById("statusMessage");
+        const prevStatus = status.innerText;
+
+        const batchSize = 8;
+        for (let i = 0; i < unique.length; i += batchSize) {
+            const batch = unique.slice(i, i + batchSize);
+            const promises = batch.map(async (line) => {
+                try {
+                    const encoded = encodeURIComponent(line);
+                    const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=es|en`;
+                    
+                    const response = await fetch(url, { 
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+            
+                    if (!response.ok) return null;
+                    
+                    const data = await response.json();
+                    if (data.responseData && data.responseData.translatedText) {
+                        return { original: line, translated: data.responseData.translatedText };
+                    }
+                    return null;
+                } catch (e) {
+                    console.warn("Translation failed for line:", line, e);
+                    return null;
                 }
-                res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
-                data = await res.json();
-                if (data && data.data) renderSuggestions(data.data);
-            } catch(e) {}
-        }, 300);
-    });
-
-    function renderSuggestions(songs) {
-        suggestionsBox.innerHTML = '';
-        songs.slice(0, 8).forEach(song => {
-            const songTitle = song.trackName || song.title || song.song || 'Unknown';
-            const songArtist = song.artistName || song.artist || 'Unknown';
-            const div = document.createElement('div');
-            div.className = 'suggestion-item';
-            div.innerHTML = `<span class="song-title">${songTitle}</span><span class="artist-name">${songArtist}</span>`;
-            div.addEventListener('click', () => {
-                searchQuery.value = `${songTitle} - ${songArtist}`;
-                titleInput.value = songTitle;
-                artistInput.value = songArtist;
-                suggestionsBox.style.display = 'none';
             });
-            suggestionsBox.appendChild(div);
-        });
-        if (songs.length > 0) suggestionsBox.style.display = 'block';
+            const results = await Promise.all(promises);
+            results.forEach(r => {
+                if (r && r.translated) {
+                    translations[r.original] = r.translated;
+                }
+            });
+            if (i + batchSize < unique.length) {
+                await new Promise(resolve => setTimeout(resolve, 350));
+            }
+        }
+        
+        console.log(`✅ Translations loaded: ${Object.keys(translations).length} lines`);
+        status.className = "status success";
+        status.innerText = Object.keys(translations).length > 0 
+            ? "✅ Spanish → English translations loaded!" 
+            : (prevStatus || "");
+
+        return translations;
     }
 
-    document.addEventListener('click', (e) => {
-        if (e.target !== searchQuery && !suggestionsBox.contains(e.target)) suggestionsBox.style.display = 'none';
-    });
+    function detectSpanish(rawText) {
+        var spanishWords = ["que", "con", "una", "para", "como", "pero", "por", "amor", "corazon", "cuando", "todo", "eres", "estoy", "quiero", "vida", "noche", "solo", "siempre", "tu", "mi", "me", "te", "se", "es", "del", "las", "los", "hay", "tan", "mas", "sin", "hoy"];
+        var lower = rawText.toLowerCase().replace(/[áéíóúü]/g, function(c){ return {á:"a",é:"e",í:"i",ó:"o",ú:"u",ü:"u"}[c]||c; });
+        var hits = spanishWords.filter(function(w){ return new RegExp("\\b" + w + "\\b").test(lower); }).length;
+        return hits >= 4;
+    }
 
-    // FIXED Fetch Lyrics (this was the problem)
-    document.getElementById('fetchBtn').addEventListener('click', async () => {
-        const title = titleInput.value.trim();
-        const artist = artistInput.value.trim();
-        if (!title || !artist) {
-            status.className = "status error";
-            status.textContent = "Please select a song from the dropdown first.";
+    function compressLyricsByParts(rawText, applyCompression) {
+        var cleanTimestamps = rawText.replace(/\[\d{1,3}:\d{2}(:\d{2})?(\.\d{2,3})?\]/g, "");
+        var rawLines = cleanTimestamps.replace(/\r\n/g, "\n").split("\n");
+        var processedBlocks = [];
+        var tempPair = [];
+
+        var songTitle = document.getElementById("title").value.trim().toLowerCase();
+        rawLines.forEach(function(line) {
+            var cleanedLine = line.trim();
+            var lowerLine = cleanedLine.toLowerCase();
+            
+            if (lowerLine.indexOf("grazie") === 0 || 
+                lowerLine.indexOf("testo di") === 0 || 
+                lowerLine.indexOf("(grazie") === 0 ||
+                lowerLine.indexOf("lyrics from") !== -1 ||
+                lowerLine.indexOf("testo gentilmente") !== -1 ||
+                lowerLine.indexOf("copyright") !== -1) {
+                return;
+            }
+            
+            if (!cleanedLine) {
+                if (tempPair.length > 0) {
+                    processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
+                    tempPair = [];
+                }
+                processedBlocks.push({ type: "break" });
+                return;
+            }
+
+            var isMarker = structuralMarkers.some(function(marker) { return lowerLine.indexOf(marker) !== -1; }) || 
+                           (cleanedLine.indexOf("[") === 0 && cleanedLine.indexOf("]") !== -1) ||
+                           (cleanedLine.indexOf("Verse") === 0) || (cleanedLine.indexOf("Bridge") === 0);
+            if (isMarker) {
+                if (tempPair.length > 0) {
+                    processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
+                    tempPair = [];
+                }
+                var markerText = cleanedLine;
+                if (markerText.indexOf("[") !== 0) {
+                    markerText = "[" + markerText.replace(/[\[\]]/g, "") + "]";
+                }
+                processedBlocks.push({ type: "section", text: markerText });
+                return;
+            }
+
+            var wordCount = cleanedLine.split(/\s+/).length;
+            var isShortHookPhrase = (wordCount < 4) || (songTitle && lowerLine.indexOf(songTitle) !== -1);
+            if (applyCompression && !isShortHookPhrase && cleanedLine.length < 35) {
+                tempPair.push(cleanedLine);
+                if (tempPair.length === 2) {
+                    processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
+                    tempPair = [];
+                }
+            } else {
+                if (tempPair.length > 0) {
+                    processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
+                    tempPair = [];
+                }
+                processedBlocks.push({ type: "line", text: cleanedLine });
+            }
+        });
+
+        if (tempPair.length > 0) {
+            processedBlocks.push({ type: "line", text: tempPair.join("  |  ") });
+        }
+
+        return processedBlocks;
+    }
+
+    async function fetchLyricsLrcLib(artist, title) {
+        let url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+        console.log("🔍 Trying LRCLIB direct:", url);
+        
+        try {
+            let response = await fetch(url);
+            if (response.ok) {
+                let data = await response.json();
+                let lyrics = data.syncedLyrics || data.plainLyrics || "";
+                if (lyrics && lyrics.length > 100) {
+                    console.log("✅ LRCLIB direct success");
+                    return lyrics;
+                }
+            }
+        } catch(e) { console.warn("LRCLIB direct failed"); }
+
+        // Search fallback
+        try {
+            url = `https://lrclib.net/api/search?q=${encodeURIComponent(artist + " " + title)}`;
+            console.log("🔍 Trying LRCLIB search fallback:", url);
+            let response = await fetch(url);
+            if (response.ok) {
+                let results = await response.json();
+                if (Array.isArray(results) && results.length > 0) {
+                    let best = results[0];
+                    let lyrics = best.syncedLyrics || best.plainLyrics || "";
+                    if (lyrics && lyrics.length > 100) {
+                        console.log("✅ LRCLIB search success");
+                        return lyrics;
+                    }
+                }
+            }
+        } catch(e) { console.warn("LRCLIB search failed"); }
+        
+        return "";
+    }
+
+    async function fetchLyricsOvh(artist, title) {
+        var url = "https://api.lyrics.ovh/v1/" + encodeURIComponent(artist) + "/" + encodeURIComponent(title);
+        console.log("🔍 Trying Original Server (Lyrics.ovh):", url);
+        var response = await fetch(url);
+        if (!response.ok) throw new Error("Server response error");
+        var data = await response.json();
+        return data.lyrics || "";
+    }
+
+    function renderEngine() {
+        var artist = document.getElementById("artist").value;
+        var title = document.getElementById("title").value;
+        var fontSize = document.getElementById("textSize").value;
+        var compressChecked = document.getElementById("compression").checked;
+        var showTranslation = document.getElementById("showTranslation").checked;
+        var rawLyrics = window.lastFetchedLyrics || "";
+        var isSpanish = rawLyrics ? detectSpanish(rawLyrics) : false;
+
+        document.getElementById("pTitle").innerText = title ? title.toUpperCase() : "SONG TITLE";
+        document.getElementById("pArtist").innerText = artist ? "Artist: " + artist : "Artist Name";
+        
+        var bodyContainer = document.getElementById("pBody");
+        bodyContainer.innerHTML = "";
+        bodyContainer.style.fontSize = fontSize + "px";
+
+        if (!rawLyrics) {
+            bodyContainer.innerText = "Search a track above to construct layout rules.";
             return;
         }
 
-        status.textContent = "Fetching lyrics...";
+        var formattedBlocks = compressLyricsByParts(rawLyrics, compressChecked);
+        var useTranslation = showTranslation && isSpanish;
+        formattedBlocks.forEach(function(block) {
+            if (block.type === "break") {
+                bodyContainer.appendChild(document.createElement("br"));
+            } else if (block.type === "section") {
+                var el = document.createElement("span");
+                el.className = "structural-section";
+                el.style.fontSize = (parseFloat(fontSize) + 1) + "px";
+                el.innerText = block.text;
+                bodyContainer.appendChild(el);
+            } else {
+                if (useTranslation && window.translationLines[block.text]) {
+                    var trans = document.createElement("span");
+                    trans.className = "lyric-translation";
+                    trans.style.fontSize = (parseFloat(fontSize) * 0.88) + "px";
+                    trans.innerText = window.translationLines[block.text];
+                    bodyContainer.appendChild(trans);
+                }
+                var el = document.createElement("span");
+                el.className = isSpanish && showTranslation ? "lyric-line-spanish" : "lyric-line";
+                el.innerText = block.text;
+                bodyContainer.appendChild(el);
+            }
+        });
+    }
 
-        try {
-            // FIXED: correct parameter names for lrclib.net
-            const res = await fetch(`https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`);
-            const data = await res.json();
-            
-            let lyrics = data.lyrics || data.plainLyrics || "Lyrics not found in database.";
+    async function renderWithTranslation() {
+        var rawLyrics = window.lastFetchedLyrics || "";
+        var showTranslation = document.getElementById("showTranslation").checked;
+        var isSpanishDetected = detectSpanish(rawLyrics);
+        if (!showTranslation || !rawLyrics || !isSpanishDetected) {
+            renderEngine();
+            return;
+        }
+        var compressChecked = document.getElementById("compression").checked;
+        var blocks = compressLyricsByParts(rawLyrics, compressChecked);
+        var lyricLines = blocks.filter(function(b){ return b.type === "line"; }).map(function(b){ return b.text; });
+        var uncached = lyricLines.filter(function(l){ return !window.translationLines[l]; });
+        if (uncached.length > 0) {
+            window.translationPending = true;
+            var status = document.getElementById("statusMessage");
+            var prevStatus = status.innerText;
+            status.className = "status warning";
+            status.innerText = "🌐 Fetching English translations for " + uncached.length + " lines...";
+            try {
+                var result = await fetchSpanishTranslation(uncached);
+                Object.assign(window.translationLines, result);
+                status.className = "status success";
+                status.innerText = Object.keys(result).length > 0 ? "✅ Translations loaded!" : (prevStatus || "");
+            } catch(e) {
+                status.className = "status error";
+                status.innerText = "⚠️ Translation fetch failed.";
+            } finally {
+                window.translationPending = false;
+            }
+        }
+        renderEngine();
+    }
 
-            let html = `<div class="preview-title">${title}</div><div class="preview-artist">${artist}</div>`;
-            lyrics.split('\n').forEach(line => {
-                if (line.trim() === '') html += `<br>`;
-                else if (line.startsWith('[')) html += `<span class="structural-section">${line}</span>`;
-                else html += `<span class="lyric-line">${line}</span>`;
-            });
-            
-            previewContent.innerHTML = html;
-            status.className = "status success";
-            status.textContent = "✅ Lyrics loaded!";
-        } catch(e) {
-            status.className = "status error";
-            status.textContent = "Could not fetch lyrics (try a different song)";
+    document.getElementById("searchQuery").addEventListener("input", function(e) {
+        var value = e.target.value.trim();
+        var dropdown = document.getElementById("suggestionsBox");
+
+        clearTimeout(autocompleteTimeout);
+
+        if (value.length < 2) {
+            dropdown.style.display = "none";
+            dropdown.innerHTML = "";
+            return;
+        }
+
+        autocompleteTimeout = setTimeout(async function() {
+            // First Priority: Try Original Server Suggestion
+            try {
+                var res = await fetch("https://api.lyrics.ovh/suggest/" + encodeURIComponent(value));
+                if (res.ok) {
+                    var payload = await res.json();
+                    var tracks = payload.data || [];
+                    if (tracks.length > 0) {
+                        dropdown.innerHTML = "";
+                        tracks.slice(0, 7).forEach(function(track) {
+                            var item = document.createElement("div");
+                            item.className = "suggestion-item";
+                            var details = document.createElement("div");
+                            var sTitle = document.createElement("span");
+                            sTitle.className = "song-title";
+                            sTitle.innerText = track.title;
+                            var sArtist = document.createElement("span");
+                            sArtist.className = "artist-name";
+                            sArtist.innerText = " by " + track.artist.name;
+                            
+                            details.appendChild(sTitle);
+                            details.appendChild(sArtist);
+                            item.appendChild(details);
+                            item.addEventListener("click", function() {
+                                document.getElementById("searchQuery").value = track.title + " - " + track.artist.name;
+                                document.getElementById("artist").value = track.artist.name;
+                                document.getElementById("title").value = track.title;
+                                dropdown.style.display = "none";
+                                document.getElementById("generateBtn").click();
+                            });
+                            dropdown.appendChild(item);
+                        });
+                        dropdown.style.display = "block";
+                        return; // Successfully used original server
+                    }
+                }
+            } catch (err) { console.log("Original server auto-suggest failed, trying fallback..."); }
+
+            // Second Priority Backup: Try LRCLIB search if original server is down
+            try {
+                var res = await fetch("https://lrclib.net/api/search?q=" + encodeURIComponent(value));
+                if (!res.ok) return;
+                var tracks = await res.json();
+
+                dropdown.innerHTML = "";
+                if (!Array.isArray(tracks) || tracks.length === 0) { dropdown.style.display = "none"; return; }
+
+                tracks.slice(0, 7).forEach(function(track) {
+                    var item = document.createElement("div");
+                    item.className = "suggestion-item";
+                    var details = document.createElement("div");
+                    var sTitle = document.createElement("span");
+                    sTitle.className = "song-title";
+                    sTitle.innerText = track.name;
+                    var sArtist = document.createElement("span");
+                    sArtist.className = "artist-name";
+                    sArtist.innerText = " by " + track.artistName;
+                    
+                    details.appendChild(sTitle);
+                    details.appendChild(sArtist);
+                    item.appendChild(details);
+                    item.addEventListener("click", function() {
+                        document.getElementById("searchQuery").value = track.name + " - " + track.artistName;
+                        document.getElementById("artist").value = track.artistName;
+                        document.getElementById("title").value = track.name;
+                        dropdown.style.display = "none";
+                        document.getElementById("generateBtn").click();
+                    });
+                    dropdown.appendChild(item);
+                });
+                dropdown.style.display = "block";
+            } catch (err) { console.log("All auto-suggest networks down."); }
+        }, 300);
+    });
+
+    document.addEventListener("click", function(e) {
+        if (e.target.id !== "searchQuery") {
+            document.getElementById("suggestionsBox").style.display = "none";
         }
     });
 
-    // Copy, Print, GDocs, Full Screen
-    document.getElementById('copyBtn').addEventListener('click', () => {
-        navigator.clipboard.writeText(previewContent.innerText || "").then(() => status.textContent = "Copied!");
+    document.getElementById("textSize").addEventListener("input", function(e) {
+        document.getElementById("sizeVal").innerText = e.target.value;
+        renderEngine();
     });
-    document.getElementById('printBtn').addEventListener('click', () => window.print());
-    document.getElementById('gdocsBtn').addEventListener('click', () => status.textContent = "Google Docs export ready");
+
+    document.getElementById("compression").addEventListener("change", renderEngine);
+    document.getElementById("showTranslation").addEventListener("change", function() {
+        window.translationLines = {};
+        renderWithTranslation();
+    });
+
+    function parseInputFields() {
+        var inputVal = document.getElementById("searchQuery").value.trim();
+        if (!document.getElementById("title").value || !document.getElementById("artist").value) {
+            if (inputVal.indexOf(" - ") !== -1) {
+                var parts = inputVal.split(" - ");
+                document.getElementById("title").value = parts[0].trim();
+                document.getElementById("artist").value = parts[1].trim();
+            } else {
+                document.getElementById("title").value = inputVal;
+                document.getElementById("artist").value = "";
+            }
+        }
+    }
+
+    async function executeLookupPipeline(customArtist, customTitle) {
+        var status = document.getElementById("statusMessage");
+        var lyricsBuffer = "";
+        
+        status.innerText = "🔍 Trying Original Server (Lyrics.ovh)...";
+        try {
+            lyricsBuffer = await fetchLyricsOvh(customArtist, customTitle);
+            if (lyricsBuffer && lyricsBuffer.length > 150) return lyricsBuffer;
+        } catch (e) { console.log("Original server failed, attempting LRCLIB fallback..."); }
+        
+        status.innerText = "🔍 Trying Backup Network (LRCLIB)...";
+        try {
+            lyricsBuffer = await fetchLyricsLrcLib(customArtist, customTitle);
+            if (lyricsBuffer && lyricsBuffer.length > 150) return lyricsBuffer;
+        } catch(err){}
+        
+        return lyricsBuffer;
+    }
+
+    document.getElementById("generateBtn").addEventListener("click", async function() {
+        parseInputFields();
+        var artist = document.getElementById("artist").value.trim();
+        var title = document.getElementById("title").value.trim();
+        var status = document.getElementById("statusMessage");
+
+        if (!title) {
+            status.className = "status error";
+            status.innerText = "⚠️ Please enter a song name.";
+            return;
+        }
+
+        status.className = "status";
+        status.innerText = "🔍 Looking up lyrics...";
+
+        var result = await executeLookupPipeline(artist, title);
+
+        if (result && result.trim().length > 150) {
+            window.lastFetchedLyrics = result;
+            window.translationLines = {};
+            document.getElementById("manualLyrics").value = result;
+            status.className = "status success";
+            status.innerText = "🎉 Lyrics loaded successfully!";
+            await renderWithTranslation();
+        } else {
+            window.lastFetchedLyrics = "";
+            window.translationLines = {};
+            document.getElementById("manualLyrics").value = "";
+            status.className = "status warning";
+            status.innerText = "⚠️ Could not find full lyrics automatically. Paste manually below 👇";
+            renderEngine();
+        }
+    });
+
+    document.getElementById("fixBtn").addEventListener("click", async function() {
+        parseInputFields();
+        var artist = document.getElementById("artist").value.trim();
+        var title = document.getElementById("title").value.trim();
+        var status = document.getElementById("statusMessage");
+
+        if (!title) {
+            status.className = "status error";
+            status.innerText = "⚠️ Type a song name first.";
+            return;
+        }
+
+        status.className = "status warning";
+        status.innerText = "🛠️ Searching alternative combinations...";
+
+        var mutatedResult = await executeLookupPipeline("", title);
+        if (!mutatedResult || mutatedResult.length < 250) mutatedResult = await executeLookupPipeline(artist, title + " lyrics");
+
+        if (mutatedResult && mutatedResult.trim().length > 150) {
+            window.lastFetchedLyrics = mutatedResult;
+            window.translationLines = {};
+            document.getElementById("manualLyrics").value = mutatedResult;
+            status.className = "status success";
+            status.innerText = "🎉 Alternative lyrics found!";
+            await renderWithTranslation();
+        } else {
+            status.className = "status error";
+            status.innerText = "❌ Still couldn't find it. Paste the lyrics manually below.";
+        }
+    });
+
+    document.getElementById("updateManualBtn").addEventListener("click", function() {
+        let manualText = document.getElementById("manualLyrics").value.trim();
+        if (!manualText) {
+            alert("The text container box is empty.");
+            return;
+        }
+        
+        const cleaned = manualText.replace(/\[\d{1,3}:\d{2}(:\d{2})?(\.\d{2,3})?\]/g, "").trim();
+        
+        window.lastFetchedLyrics = cleaned;
+        window.translationLines = {};
+        document.getElementById("manualLyrics").value = cleaned;
+        
+        const status = document.getElementById("statusMessage");
+        status.className = "status success";
+        status.innerText = "✅ Manual lyrics applied & cleaned!";
+        
+        renderWithTranslation();
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", function() {
+        var artist = document.getElementById("artist").value.trim() || "Artist Name";
+        var title = document.getElementById("title").value.trim() || "SONG TITLE";
+        var compressChecked = document.getElementById("compression").checked;
+        var rawLyrics = window.lastFetchedLyrics || "";
+
+        if (!rawLyrics) {
+            alert("Nothing to copy yet!");
+            return;
+        }
+
+        var blocks = compressLyricsByParts(rawLyrics, compressChecked);
+        var finalOutputText = title.toUpperCase() + "\nArtist: " + artist + "\n\n";
+
+        blocks.forEach(function(block) {
+            if (block.type === "break") {
+                finalOutputText += "\n";
+            } else if (block.type === "section") {
+                finalOutputText += block.text + "\n";
+            } else {
+                finalOutputText += block.text + "\n";
+            }
+        });
+
+        navigator.clipboard.writeText(finalOutputText.trim()).then(function() {
+            alert("Copied clean mobile text format to clipboard!");
+        });
+    });
+
+    function generateGDocsHtmlDocument() {
+        var content = document.getElementById("previewContainer").innerHTML;
+        var fontSize = document.getElementById("textSize").value;
+        return "<html><head><meta charset='UTF-8'><title>Lyric Sheet</title><style>" +
+            "@page { margin: 0.75in 0.75in 0.75in 0.75in; }" +
+            "body { font-family: Arial, sans-serif; width: 100%; margin: 0; padding: 0; line-height: 1.4; color: #000000; background-color: #ffffff; }" +
+            ".preview-title { font-weight: bold; text-transform: uppercase; margin-bottom: 4px; font-size: 24px; display: block; }" +
+            ".preview-artist { font-style: italic; color: #555555; margin-bottom: 24px; font-size: 14px; display: block; }" +
+            ".structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 16px; margin-bottom: 6px; color: #111111; font-size: " + (parseFloat(fontSize) + 2) + "pt; }" +
+            ".lyric-line { display: block; margin-bottom: 6px; font-size: " + fontSize + "pt; color: #000000; width: 100%; clear: both; }" +
+            ".lyric-line-spanish { display: block; margin-bottom: 6px; font-size: " + fontSize + "pt; font-weight: bold; color: #000000; width: 100%; clear: both; }" +
+            ".lyric-translation { display: block; margin-bottom: 2px; font-size: " + (parseFloat(fontSize) * 0.88) + "pt; color: #555555; font-style: italic; width: 100%; clear: both; }" +
+            "</style></head><body>" + content + "</body></html>";
+    }
+
+    document.getElementById("printBtn").addEventListener("click", function() {
+        var printWindow = window.open("", "_blank");
+        var htmlPayload = generateGDocsHtmlDocument();
+        printWindow.document.write(htmlPayload);
+        printWindow.document.close();
+        setTimeout(function() { printWindow.print(); }, 250);
+    });
+
+    document.getElementById("gdocsBtn").addEventListener("click", function() {
+        var title = document.getElementById("title").value.trim() || "Lyric Sheet";
+        var htmlPayload = generateGDocsHtmlDocument();
+        
+        var blob = new Blob([htmlPayload], { type: "text/html;charset=utf-8" });
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = title + " - Mobile Lyric Sheet.html";
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        alert("⚡ File downloaded! Drag into Google Drive → Open with → Google Docs.");
+    });
+
+    renderEngine();
+
+    <!-- === FULL SCREEN BUTTON - ONLY ADDITION === -->
+    <script>
     document.getElementById('fullscreenBtn').addEventListener('click', async () => {
-        if (!document.fullscreenElement) await phoneFrame.requestFullscreen().catch(() => alert("Fullscreen blocked"));
-        else document.exitFullscreen();
+        const phoneFrame = document.getElementById('phoneFrame');
+        if (!phoneFrame) {
+            alert("Phone preview not found");
+            return;
+        }
+        if (!document.fullscreenElement) {
+            try {
+                await phoneFrame.requestFullscreen();
+            } catch (err) {
+                console.error(err);
+                alert("Fullscreen not supported or blocked by your browser.");
+            }
+        } else {
+            document.exitFullscreen();
+        }
     });
+    </script>
 </script>
 </body>
 </html>
