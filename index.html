@@ -34,11 +34,11 @@
         .secondary-btn:hover { background-color: #4b5563; }
         .gdocs-btn { background-color: #0f9d58; grid-column: span 2; }
         .gdocs-btn:hover { background-color: #0b8043; }
-
+        
         .status { margin-top: 15px; font-size: 14px; font-weight: 500; min-height: 20px; line-height: 1.4; }
         .error { color: #dc2626; }
         .success { color: #16a34a; }
-
+        
         .phone-wrapper { display: flex; flex-direction: column; align-items: center; }
         .phone-frame {
             width: 100%; max-width: 360px; height: 600px; background: #fff; border: 12px solid #222;
@@ -49,8 +49,6 @@
         .preview-artist { font-style: italic; color: #666; margin-bottom: 20px; font-size: 14px; }
         .structural-section { font-weight: bold; font-style: italic; display: block; margin-top: 14px; margin-bottom: 4px; color: #111; }
         .lyric-line { display: block; margin-bottom: 6px; line-height: 1.35; }
-        
-        .action-btns { width: 100%; max-width: 360px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     </style>
 </head>
 <body>
@@ -99,15 +97,33 @@
     const status = document.getElementById('status');
     let debounceTimer;
 
-    // BULLETPROOF field extraction (fixed for both APIs)
+    // Song picker (already working for you)
+    searchQuery.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const query = searchQuery.value.trim();
+        suggestionsBox.style.display = 'none';
+        if (query.length < 2) return;
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                let res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
+                let data = await res.json();
+                if (data && data.length > 0) {
+                    renderSuggestions(data);
+                    return;
+                }
+                res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
+                data = await res.json();
+                if (data && data.data) renderSuggestions(data.data);
+            } catch(e) {}
+        }, 300);
+    });
+
     function renderSuggestions(songs) {
         suggestionsBox.innerHTML = '';
         songs.slice(0, 8).forEach(song => {
-            const songTitle = song.trackName || song.title || song.name || song.song || 'Unknown Song';
-            let songArtist = song.artistName || song.artist || 'Unknown Artist';
-            if (typeof songArtist === 'object' && songArtist !== null) {
-                songArtist = songArtist.name || 'Unknown Artist';
-            }
+            const songTitle = song.trackName || song.title || song.song || 'Unknown';
+            const songArtist = song.artistName || song.artist || 'Unknown';
             const div = document.createElement('div');
             div.className = 'suggestion-item';
             div.innerHTML = `<span class="song-title">${songTitle}</span><span class="artist-name">${songArtist}</span>`;
@@ -122,61 +138,46 @@
         if (songs.length > 0) suggestionsBox.style.display = 'block';
     }
 
-    // Live search
-    searchQuery.addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        const query = searchQuery.value.trim();
-        suggestionsBox.style.display = 'none';
-        if (query.length < 2) return;
-
-        debounceTimer = setTimeout(async () => {
-            try {
-                // Primary API
-                let res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
-                let data = await res.json();
-                if (data && data.length > 0) {
-                    renderSuggestions(data);
-                    return;
-                }
-                // Fallback API
-                res = await fetch(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
-                data = await res.json();
-                if (data && data.data) renderSuggestions(data.data);
-            } catch(e) {}
-        }, 300);
-    });
-
     document.addEventListener('click', (e) => {
         if (e.target !== searchQuery && !suggestionsBox.contains(e.target)) suggestionsBox.style.display = 'none';
     });
 
-    // Fetch Lyrics
+    // FIXED Fetch Lyrics (this was the problem)
     document.getElementById('fetchBtn').addEventListener('click', async () => {
         const title = titleInput.value.trim();
         const artist = artistInput.value.trim();
         if (!title || !artist) {
-            status.className = "status error"; status.textContent = "Select a song from the dropdown first."; return;
+            status.className = "status error";
+            status.textContent = "Please select a song from the dropdown first.";
+            return;
         }
+
         status.textContent = "Fetching lyrics...";
+
         try {
-            const res = await fetch(`https://lrclib.net/api/get?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
+            // FIXED: correct parameter names for lrclib.net
+            const res = await fetch(`https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`);
             const data = await res.json();
-            let lyrics = data.lyrics || "Lyrics not found.";
+            
+            let lyrics = data.lyrics || data.plainLyrics || "Lyrics not found in database.";
+
             let html = `<div class="preview-title">${title}</div><div class="preview-artist">${artist}</div>`;
             lyrics.split('\n').forEach(line => {
                 if (line.trim() === '') html += `<br>`;
                 else if (line.startsWith('[')) html += `<span class="structural-section">${line}</span>`;
                 else html += `<span class="lyric-line">${line}</span>`;
             });
+            
             previewContent.innerHTML = html;
             status.className = "status success";
-            status.textContent = "Lyrics loaded!";
+            status.textContent = "✅ Lyrics loaded!";
         } catch(e) {
-            status.className = "status error"; status.textContent = "Could not fetch lyrics.";
+            status.className = "status error";
+            status.textContent = "Could not fetch lyrics (try a different song)";
         }
     });
 
-    // Other buttons
+    // Copy, Print, GDocs, Full Screen
     document.getElementById('copyBtn').addEventListener('click', () => {
         navigator.clipboard.writeText(previewContent.innerText || "").then(() => status.textContent = "Copied!");
     });
